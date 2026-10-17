@@ -168,10 +168,19 @@ def write_batches(driver: Driver, label: str, query: str, rows: list, size: int)
 
 
 def reset_graph(driver: Driver) -> None:
-    """Delete every node and relationship, in batches, keeping the schema."""
+    """Delete every node and relationship, in batches, keeping the schema.
+
+    Relationships go first: a batch of nodes deleted with DETACH can carry
+    hundreds of thousands of ratings (popular movies, very active users) and
+    exceed the transaction memory limit, while a batch of relationships is
+    bounded by its size.
+    """
     with driver.session() as session:
         session.run(
-            "MATCH (n) CALL (n) { DETACH DELETE n } IN TRANSACTIONS OF 10000 ROWS"
+            "MATCH ()-[r]->() CALL (r) { DELETE r } IN TRANSACTIONS OF 10000 ROWS"
+        ).consume()
+        session.run(
+            "MATCH (n) CALL (n) { DELETE n } IN TRANSACTIONS OF 10000 ROWS"
         ).consume()
 
 
