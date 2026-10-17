@@ -7,6 +7,46 @@ What the graph contains, how to load it, and the conventions every query should 
 | Available | Users, movies, genres, ratings, tags; constraints and indexes; test fixture |
 | Available (`scripts/run_gds.py`) | `SIMILAR` relationships, `Movie.community`, `Movie.pagerank`, `User.community` |
 
+## Local setup (until the Docker Compose stack exists)
+
+Two Neo4j containers: one for development data, one disposable for the integration tests (they wipe it). Ports 7688 and 7689 avoid clashing with another local Neo4j on the defaults.
+
+```bash
+docker run -d --name kg-neo4j -p 7475:7474 -p 7688:7687 \
+  -e NEO4J_AUTH=neo4j/<choose-a-password> \
+  -e 'NEO4J_PLUGINS=["apoc","graph-data-science"]' \
+  -e 'NEO4J_dbms_security_procedures_unrestricted=gds.*,apoc.*' \
+  -e NEO4J_server_memory_heap_max__size=2G -e NEO4J_server_memory_pagecache_size=1G \
+  -v kg-neo4j-data:/data neo4j:5.26
+
+docker run -d --name kg-neo4j-test -p 7689:7687 \
+  -e NEO4J_AUTH=neo4j/<same-password> \
+  -e 'NEO4J_PLUGINS=["apoc","graph-data-science"]' \
+  -e 'NEO4J_dbms_security_procedures_unrestricted=gds.*,apoc.*' \
+  -e NEO4J_server_memory_heap_max__size=1G -e NEO4J_server_memory_pagecache_size=256M \
+  neo4j:5.26
+```
+
+The first start downloads the plugins and takes a minute or two. Then create `.env` at the repository root (never committed):
+
+```bash
+NEO4J_URI=bolt://localhost:7688
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=<the password above>
+DATA_DIR=data
+NEO4J_TEST_URI=bolt://localhost:7689
+```
+
+Install the dependencies and check everything works:
+
+```bash
+uv sync
+uv run --env-file .env pytest -q      # all tests, including Neo4j integration tests
+uv run pytest -q                      # without Neo4j: integration tests are skipped
+```
+
+Add new dependencies with `uv add <package>` (runtime) or `uv add --dev <package>` (tools, notebooks), so `pyproject.toml` and `uv.lock` stay the source of truth.
+
 ## Loading the data
 
 ```bash
