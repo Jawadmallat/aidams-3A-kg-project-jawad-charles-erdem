@@ -82,17 +82,17 @@ Measured on the ml-25m 5% sample (1,265,960 ratings): precomputed similar answer
 
 ## Public image
 
-The API image is published to Docker Hub so the stack can run without building:
+The API image is published to Docker Hub, [erdemsanver1/movie-recommender-api](https://hub.docker.com/r/erdemsanver1/movie-recommender-api), so the stack can run without building:
 
 ```bash
-docker pull <dockerhub-user>/movie-recommender-api   # link added once published
+docker pull erdemsanver1/movie-recommender-api
 ```
 
 Publishing is a manual, deliberate step (nothing in CI pushes images):
 
 ```bash
 docker login
-make docker-build docker-push DOCKER_USER=<dockerhub-user>
+make docker-build docker-push DOCKER_USER=erdemsanver1
 ```
 
 ## Local development
