@@ -50,11 +50,13 @@ def seeded_graph(neo4j_driver, fixture_frames):
 
 
 @pytest.fixture(scope="session", name="recommender_graph")
-def fixture_recommender_graph(seeded_graph):
+def fixture_recommender_graph(seeded_graph):  # pylint: disable=redefined-outer-name
     """The seeded graph with GDS results written.
 
-    Safe at session scope: run_gds replaces its previous output and is
-    deterministic on the same graph (proven by the GDS integration tests).
+    pytest injects the seeded_graph fixture through the parameter name, which
+    pylint reads as shadowing; the disable is scoped to this line. Safe at
+    session scope: run_gds replaces its previous output and is deterministic
+    on the same graph (proven by the GDS integration tests).
     """
     run_gds(seeded_graph)
     return seeded_graph
