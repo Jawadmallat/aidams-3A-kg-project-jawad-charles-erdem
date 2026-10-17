@@ -1,0 +1,51 @@
+movieId,title,genres
+1,Toy Story (1995),Adventure|Animation|Children|Comedy|Fantasy
+32,Twelve Monkeys (a.k.a. 12 Monkeys) (1995),Mystery|Sci-Fi|Thriller
+47,Seven (a.k.a. Se7en) (1995),Mystery|Thriller
+50,"Usual Suspects, The (1995)",Crime|Mystery|Thriller
+110,Braveheart (1995),Action|Drama|War
+150,Apollo 13 (1995),Adventure|Drama|IMAX
+165,Die Hard: With a Vengeance (1995),Action|Crime|Thriller
+260,Star Wars: Episode IV - A New Hope (1977),Action|Adventure|Sci-Fi
+296,Pulp Fiction (1994),Comedy|Crime|Drama|Thriller
+318,"Shawshank Redemption, The (1994)",Crime|Drama
+344,Ace Ventura: Pet Detective (1994),Comedy
+356,Forrest Gump (1994),Comedy|Drama|Romance|War
+364,"Lion King, The (1994)",Adventure|Animation|Children|Drama|Musical|IMAX
+367,"Mask, The (1994)",Action|Comedy|Crime|Fantasy
+377,Speed (1994),Action|Romance|Thriller
+380,True Lies (1994),Action|Adventure|Comedy|Romance|Thriller
+457,"Fugitive, The (1993)",Thriller
+480,Jurassic Park (1993),Action|Adventure|Sci-Fi|Thriller
+500,Mrs. Doubtfire (1993),Comedy|Drama
+527,Schindler's List (1993),Drama|War
+588,Aladdin (1992),Adventure|Animation|Children|Comedy|Musical
+589,Terminator 2: Judgment Day (1991),Action|Sci-Fi
+590,Dances with Wolves (1990),Adventure|Drama|Western
+592,Batman (1989),Action|Crime|Thriller
+593,"Silence of the Lambs, The (1991)",Crime|Horror|Thriller
+595,Beauty and the Beast (1991),Animation|Children|Fantasy|Musical|Romance|IMAX
+608,Fargo (1996),Comedy|Crime|Drama|Thriller
+648,Mission: Impossible (1996),Action|Adventure|Mystery|Thriller
+780,Independence Day (a.k.a. ID4) (1996),Action|Adventure|Sci-Fi|Thriller
+858,"Godfather, The (1972)",Crime|Drama
+1036,Die Hard (1988),Action|Crime|Thriller
+1196,Star Wars: Episode V - The Empire Strikes Back (1980),Action|Adventure|Sci-Fi
+1198,Raiders of the Lost Ark (Indiana Jones and the Raiders of the Lost Ark) (1981),Action|Adventure
+1210,Star Wars: Episode VI - Return of the Jedi (1983),Action|Adventure|Sci-Fi
+1214,Alien (1979),Horror|Sci-Fi
+1270,Back to the Future (1985),Adventure|Comedy|Sci-Fi
+1580,Men in Black (a.k.a. MIB) (1997),Action|Comedy|Sci-Fi
+2028,Saving Private Ryan (1998),Action|Drama|War
+2571,"Matrix, The (1999)",Action|Sci-Fi|Thriller
+2762,"Sixth Sense, The (1999)",Drama|Horror|Mystery
+2858,American Beauty (1999),Drama|Romance
+2959,Fight Club (1999),Action|Crime|Drama|Thriller
+3578,Gladiator (2000),Action|Adventure|Drama
+4226,Memento (2000),Mystery|Thriller
+4306,Shrek (2001),Adventure|Animation|Children|Comedy|Fantasy|Romance
+4993,"Lord of the Rings: The Fellowship of the Ring, The (2001)",Adventure|Fantasy
+5952,"Lord of the Rings: The Two Towers, The (2002)",Adventure|Fantasy
+6539,Pirates of the Caribbean: The Curse of the Black Pearl (2003),Action|Adventure|Comedy|Fantasy
+7153,"Lord of the Rings: The Return of the King, The (2003)",Action|Adventure|Drama|Fantasy
+58559,"Dark Knight, The (2008)",Action|Crime|Drama|IMAX
