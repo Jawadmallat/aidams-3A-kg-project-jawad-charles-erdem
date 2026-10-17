@@ -52,11 +52,27 @@ def test_similar_validation_rejects_bad_parameters():
         assert client.get(url).status_code == 422, url
 
 
-def test_similar_with_dead_database_is_503():
-    """The real endpoint maps a dead database to 503."""
-    response = client_with_dead_database().get("/api/movies/1/similar")
-    assert response.status_code == 503
-    assert response.json() == {"detail": "database unavailable"}
+def test_recommendations_validation_rejects_bad_parameters():
+    """Validation answers 422 before any query runs."""
+    client = client_with_dead_database()
+    for url in (
+        "/api/users/abc/recommendations",
+        "/api/users/1/recommendations?limit=0",
+        "/api/users/1/recommendations?limit=999",
+    ):
+        assert client.get(url).status_code == 422, url
+
+
+def test_endpoints_with_dead_database_are_503():
+    """Every data endpoint maps a dead database to 503."""
+    client = client_with_dead_database()
+    for url in (
+        "/api/movies/1/similar",
+        "/api/users/1/recommendations",
+    ):
+        response = client.get(url)
+        assert response.status_code == 503, url
+        assert response.json() == {"detail": "database unavailable"}
 
 
 def make_probe(error: Exception):
