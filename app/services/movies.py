@@ -45,10 +45,14 @@ RETURN other.movieId AS movieId, other.title AS title, other.year AS year,
 
 # "Recent" is anchored on the newest rating in the data, not on today: the
 # small dataset ends in 2018, so a window ending now would be empty
-# (docs/decisions.md). The newest timestamp is read through the rated_timestamp
-# range index.
+# (docs/decisions.md). The IS NOT NULL predicate is what lets the planner
+# serve ORDER BY from the rated_timestamp range index: without it the plan
+# is a full relationship scan (1,265,961 db hits on the ml-25m sample);
+# with it, a DirectedRelationshipIndexScan reading 2 db hits. Evidence in
+# docs/performance.md.
 ANCHOR_QUERY = """
 MATCH ()-[r:RATED]->()
+WHERE r.timestamp IS NOT NULL
 RETURN r.timestamp AS anchor
 ORDER BY r.timestamp DESC
 LIMIT 1

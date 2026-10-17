@@ -62,17 +62,22 @@ LIMIT $limit
 
 # Discovery outside the user's history: unseen movies from the Louvain
 # community the user's liked movies mostly belong to, most central first.
-# Entered through the user's community id (indexed), never by expanding a
-# community to everything unbounded; LIMIT caps the page.
+# Ordering by the raw property (not a computed alias) with the pagerank
+# IS NOT NULL predicate is what engages the movie_community_pagerank
+# composite index: the seek answers the community equality and the pagerank
+# filter together (PROFILE evidence in docs/performance.md). Every movie
+# with a community also has a pagerank - run_gds writes both from the same
+# projection - so the filter excludes nothing.
 DISCOVER_QUERY = """
 MATCH (me:User {userId: $userId})
 WHERE me.community IS NOT NULL
-MATCH (rec:Movie {community: me.community})
-WHERE NOT EXISTS { (me)-[:RATED]->(rec) }
+MATCH (rec:Movie)
+WHERE rec.community = me.community AND rec.pagerank IS NOT NULL
+  AND NOT EXISTS { (me)-[:RATED]->(rec) }
 RETURN rec.movieId AS movieId, rec.title AS title, rec.year AS year,
        rec.genres AS genres, rec.community AS community,
-       round(coalesce(rec.pagerank, 0.0), 4) AS pagerank
-ORDER BY pagerank DESC, movieId
+       round(rec.pagerank, 4) AS pagerank
+ORDER BY rec.pagerank DESC, rec.movieId
 SKIP $skip LIMIT $limit
 """
 
