@@ -47,3 +47,39 @@ def test_recommendations_unknown_user_is_404(api_client):
     response = api_client.get("/api/users/999999/recommendations")
     assert response.status_code == 404
     assert "999999" in response.json()["detail"]
+
+
+def test_discover_stays_inside_the_community_and_unseen(api_client, recommender_graph):
+    """Every user's page holds only their community's movies, none already rated.
+
+    After run_gds all 20 fixture users have a community, so this sweeps them all.
+    """
+    users = recommender_graph.execute_query(
+        "MATCH (u:User) RETURN u.userId AS id, u.community AS community ORDER BY id"
+    ).records
+    assert len(users) == 20
+    for user in users:
+        body = api_client.get(f"/api/users/{user['id']}/discover").json()
+        assert body["community"] == user["community"]
+        for movie in body["results"]:
+            assert movie["community"] == user["community"]
+        recommended = {movie["movieId"] for movie in body["results"]}
+        assert not recommended & rated_movie_ids(recommender_graph, user["id"])
+
+
+def test_discover_orders_by_pagerank_and_paginates(api_client):
+    """Results descend by pagerank and skip/limit pages never overlap."""
+    full = api_client.get("/api/users/603/discover?limit=10").json()["results"]
+    ranks = [movie["pagerank"] for movie in full]
+    assert ranks == sorted(ranks, reverse=True)
+    page1 = api_client.get("/api/users/603/discover?skip=0&limit=3").json()["results"]
+    page2 = api_client.get("/api/users/603/discover?skip=3&limit=3").json()["results"]
+    assert [m["movieId"] for m in page1] == [m["movieId"] for m in full[:3]]
+    assert not {m["movieId"] for m in page1} & {m["movieId"] for m in page2}
+
+
+def test_discover_unknown_user_is_404(api_client):
+    """An id that is not in the graph names the user in a 404."""
+    response = api_client.get("/api/users/999999/discover")
+    assert response.status_code == 404
+    assert "999999" in response.json()["detail"]

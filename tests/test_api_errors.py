@@ -63,12 +63,24 @@ def test_recommendations_validation_rejects_bad_parameters():
         assert client.get(url).status_code == 422, url
 
 
+def test_discover_validation_rejects_bad_parameters():
+    """Validation answers 422 before any query runs."""
+    client = client_with_dead_database()
+    for url in (
+        "/api/users/abc/discover",
+        "/api/users/1/discover?skip=-1",
+        "/api/users/1/discover?limit=0",
+    ):
+        assert client.get(url).status_code == 422, url
+
+
 def test_endpoints_with_dead_database_are_503():
     """Every data endpoint maps a dead database to 503."""
     client = client_with_dead_database()
     for url in (
         "/api/movies/1/similar",
         "/api/users/1/recommendations",
+        "/api/users/1/discover",
     ):
         response = client.get(url)
         assert response.status_code == 503, url
