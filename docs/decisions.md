@@ -5,7 +5,7 @@ What the graph contains, how to load it, and the conventions every query should 
 | Status | Part |
 |---|---|
 | Available | Users, movies, genres, ratings, tags; constraints and indexes; test fixture |
-| Planned (Phase 2, `scripts/run_gds.py`) | `SIMILAR` relationships, `Movie.community`, `Movie.pagerank`, `User.community` |
+| Available (`scripts/run_gds.py`) | `SIMILAR` relationships, `Movie.community`, `Movie.pagerank`, `User.community` |
 
 ## Loading the data
 
@@ -14,7 +14,10 @@ uv run python scripts/download_data.py                        # ml-latest-small 
 uv run --env-file .env python -m scripts.seed_data            # load it (safe to re-run)
 uv run --env-file .env python -m scripts.seed_data --reset    # wipe, then load
 uv run --env-file .env python -m scripts.seed_data --data-dir tests/fixtures/movielens --reset
+uv run --env-file .env python -m scripts.run_gds              # SIMILAR, communities, PageRank (safe to re-run)
 ```
+
+Run `run_gds` after every load: the seed script does not compute the GDS properties.
 
 The scripts are run as modules (`python -m scripts.x`) and read these environment variables:
 
@@ -34,27 +37,27 @@ Neo4j must be **5.26** with the `apoc` and `graph-data-science` plugins and `dbm
 (:User)-[:RATED {rating, timestamp}]->(:Movie)
 (:User)-[:TAGGED {tag, timestamp}]->(:Movie)
 (:Movie)-[:IN_GENRE]->(:Genre)
-(:Movie)-[:SIMILAR {score}]->(:Movie)        planned, Phase 2
+(:Movie)-[:SIMILAR {score}]->(:Movie)
 ```
 
 | Element | Property | Type | Notes |
 |---|---|---|---|
 | `User` | `userId` | integer | unique |
-| | `community` | integer | planned: the community most of the user's liked movies belong to |
+| | `community` | integer or absent | the community most of the user's liked movies belong to; absent when none of their liked movies has a community |
 | `Movie` | `movieId` | integer | unique; the only key |
 | | `title` | string | cleaned: no year, article in front (`The Matrix`); **not unique** |
 | | `year` | integer or null | release year; null for 12 movies |
 | | `genres` | list of strings | same values as the `IN_GENRE` links; empty for 34 movies |
 | | `imdbId` | string | IMDb format, `tt0133093` |
 | | `tmdbId` | integer or null | null for 8 movies |
-| | `community` | integer | planned (Louvain on `SIMILAR`) |
-| | `pagerank` | float | planned (PageRank on `SIMILAR`) |
+| | `community` | integer or absent | Louvain on `SIMILAR`, ids 0 to n−1; absent for movies with fewer than 10 likes |
+| | `pagerank` | float or absent | PageRank on `SIMILAR`; high when many movies list this one as similar; absent for movies with fewer than 10 likes |
 | `Genre` | `name` | string | unique; 19 genres (`(no genres listed)` is not a genre) |
 | `RATED` | `rating` | float | 0.5 to 5.0 in half stars |
 | | `timestamp` | integer | Unix epoch seconds |
 | `TAGGED` | `tag` | string | lower-cased, whitespace collapsed |
 | | `timestamp` | integer | Unix epoch seconds |
-| `SIMILAR` | `score` | float | planned: Jaccard similarity of the users who liked both movies, top 10 per movie |
+| `SIMILAR` | `score` | float in (0, 1] | Jaccard similarity of the sets of users who liked each movie; top 10 per movie; only between movies with at least 10 likes |
 
 ## Constraints and indexes
 
@@ -69,6 +72,9 @@ Applied by `scripts/schema.py` (and by the seed script before loading).
 | `movie_year` | range index | `Movie.year` | year filters and ranges |
 | `rated_timestamp` | range index | `RATED.timestamp` | time windows (trending, temporal split) |
 | `tagged_tag` | range index | `TAGGED.tag` | "movies tagged X" |
+| `movie_community` | range index | `Movie.community` | movies of a community (discover) |
+| `movie_pagerank` | range index | `Movie.pagerank` | ordering by PageRank (trending) |
+| `user_community` | range index | `User.community` | users of a community |
 
 Ask Part A for any other index an endpoint needs, with the query it serves, so it lands in `scripts/schema.py` rather than in ad hoc code.
 
@@ -85,6 +91,9 @@ Ask Part A for any other index an endpoint needs, with the query it serves, so i
 * **Genres exist twice on purpose.** Use the `genres` list to filter a movie you already have (`'Comedy' IN m.genres`); use `IN_GENRE` when the genre is part of the path (movies sharing a genre, explanation paths, GDS).
 * **`IMAX` is a MovieLens genre** although it is a screening format. It is kept as MovieLens defines it.
 * **Tags are a property of `TAGGED`**, not nodes, so each relationship records who tagged which movie with what.
+* **GDS results only exist for movies with at least 10 likes** (1,182 of 9,742 in ml-latest-small, covering 74% of all likes). A movie without `SIMILAR` needs a fallback, for example co-rating Cypher (users who liked this movie also liked...). Treat a missing `pagerank` as 0.
+* **`SIMILAR` is directed** (`a` lists `b` among its top 10), and the reverse link may not exist. Query it as `(m)-[:SIMILAR]->(other)` ordered by `score`.
+* **About half of the users share one community** (the widely liked classics), so `discover` for them is close to popularity.
 
 ## Test fixture
 
@@ -98,6 +107,8 @@ Ask Part A for any other index an endpoint needs, with the query it serves, so i
 | User with the fewest ratings | `603` (30 ratings) |
 | Users with tags | `474`, `599`, `606` |
 | Known movies | `1` Toy Story (1995), `2571` The Matrix (1999) |
+| Movies with GDS results after `run_gds` | 29 (the other 21 have no `SIMILAR`: use them to test fallbacks) |
+| Users with a community after `run_gds` | all 20 |
 | Last rating | 2018-02-20 (`1519122884`) |
 
 In pytest, the `seeded_graph` fixture from `tests/conftest.py` wipes the database at `NEO4J_TEST_URI`, loads the fixture once per session and returns the driver. Tests that use it are skipped when `NEO4J_TEST_URI` is not set.
