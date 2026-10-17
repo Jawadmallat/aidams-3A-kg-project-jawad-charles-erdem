@@ -43,6 +43,11 @@ INDEXES = {
     # Written by scripts/run_gds.py. Community lookups ("other movies in this
     # user's community") and PageRank ordering for trending.
     "movie_community": "CREATE INDEX movie_community IF NOT EXISTS FOR (m:Movie) ON (m.community)",
+    # Discover reads one community ordered by PageRank (equality + sort): the
+    # composite index serves both in one seek, removing the Sort operator from
+    # the plan (evidence in docs/performance.md).
+    "movie_community_pagerank": "CREATE INDEX movie_community_pagerank IF NOT EXISTS "
+                                "FOR (m:Movie) ON (m.community, m.pagerank)",
     "movie_pagerank": "CREATE INDEX movie_pagerank IF NOT EXISTS FOR (m:Movie) ON (m.pagerank)",
     "user_community": "CREATE INDEX user_community IF NOT EXISTS FOR (u:User) ON (u.community)",
 }
