@@ -72,6 +72,7 @@ Applied by `scripts/schema.py` (and by the seed script before loading).
 | `movie_year` | range index | `Movie.year` | year filters and ranges |
 | `rated_timestamp` | range index | `RATED.timestamp` | time windows (trending, temporal split) |
 | `tagged_tag` | range index | `TAGGED.tag` | "movies tagged X" |
+| `tagged_tag_fulltext` | full-text index | `TAGGED.tag` | word search in tags ("dark" finds "dark comedy"), for `/api/ask` |
 | `movie_community` | range index | `Movie.community` | movies of a community (discover) |
 | `movie_pagerank` | range index | `Movie.pagerank` | ordering by PageRank (trending) |
 | `user_community` | range index | `User.community` | users of a community |

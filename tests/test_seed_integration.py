@@ -57,3 +57,12 @@ def test_fulltext_index_finds_cleaned_title(seeded_graph):
         "YIELD node RETURN node.title AS title LIMIT 1"
     ).records
     assert records[0]["title"] == "The Matrix"
+
+
+def test_tag_fulltext_index_matches_words_inside_tags(seeded_graph):
+    """The relationship full-text index finds a tag from one of its words."""
+    records = seeded_graph.execute_query(
+        "CALL db.index.fulltext.queryRelationships('tagged_tag_fulltext', 'travel') "
+        "YIELD relationship RETURN collect(DISTINCT relationship.tag) AS tags"
+    ).records
+    assert "time travel" in records[0]["tags"]
