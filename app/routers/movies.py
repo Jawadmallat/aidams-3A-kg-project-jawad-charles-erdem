@@ -4,13 +4,26 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from neo4j import Driver
 
 from app.db import get_driver
-from app.models import SimilarResponse
+from app.models import SimilarResponse, TrendingResponse
 from app.services import movies as service
 
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 50
+DEFAULT_WINDOW_DAYS = 365
+MAX_WINDOW_DAYS = 10000
 
 router = APIRouter(prefix="/api/movies", tags=["movies"])
+
+
+@router.get("/trending", response_model=TrendingResponse)
+def trending(
+    days: int = Query(DEFAULT_WINDOW_DAYS, ge=1, le=MAX_WINDOW_DAYS),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
+    driver: Driver = Depends(get_driver),
+) -> TrendingResponse:
+    """Popular and central: recent rating volume blended with PageRank."""
+    return TrendingResponse(**service.trending(driver, days, skip, limit))
 
 
 @router.get("/{movie_id}/similar", response_model=SimilarResponse)

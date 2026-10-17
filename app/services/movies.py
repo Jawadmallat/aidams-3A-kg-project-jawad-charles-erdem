@@ -43,6 +43,33 @@ RETURN other.movieId AS movieId, other.title AS title, other.year AS year,
 """
 
 
+# "Recent" is anchored on the newest rating in the data, not on today: the
+# small dataset ends in 2018, so a window ending now would be empty
+# (docs/decisions.md). The newest timestamp is read through the rated_timestamp
+# range index.
+ANCHOR_QUERY = """
+MATCH ()-[r:RATED]->()
+RETURN r.timestamp AS anchor
+ORDER BY r.timestamp DESC
+LIMIT 1
+"""
+
+# Trending blends the trend signal (rating volume inside the window) with
+# structural importance: score = volume x (1 + pagerank). A movie without
+# GDS results (missing pagerank counts as 0) can still trend on volume alone.
+TRENDING_QUERY = """
+WITH $anchor - $days * 86400 AS cutoff
+MATCH (:User)-[r:RATED]->(m:Movie)
+WHERE r.timestamp >= cutoff
+WITH m, count(r) AS recentRatings
+RETURN m.movieId AS movieId, m.title AS title, m.year AS year, m.genres AS genres,
+       recentRatings, round(coalesce(m.pagerank, 0.0), 4) AS pagerank,
+       round(recentRatings * (1 + coalesce(m.pagerank, 0.0)), 3) AS score
+ORDER BY score DESC, movieId
+SKIP $skip LIMIT $limit
+"""
+
+
 def find_movie(driver: Driver, movie_id: int) -> dict | None:
     """Return a movie's id and title, or None when the id is unknown."""
     records = driver.execute_query(MOVIE_QUERY, movieId=movie_id).records
@@ -67,3 +94,24 @@ def similar_movies(driver: Driver, movie_id: int, limit: int) -> dict | None:
         ).records
         source = "co_rating"
     return {**movie, "source": source, "results": [record.data() for record in records]}
+
+
+def trending(driver: Driver, days: int, skip: int, limit: int) -> dict:
+    """Popular and central movies of the window ending at the newest rating.
+
+    The anchor is returned so "recent" is transparent: on the development
+    dataset it is September 2018, not today.
+    """
+    anchor_records = driver.execute_query(ANCHOR_QUERY).records
+    if not anchor_records:  # empty graph: nothing rated yet
+        return {"anchor": None, "windowDays": days, "results": []}
+
+    anchor = anchor_records[0]["anchor"]
+    records = driver.execute_query(
+        TRENDING_QUERY, anchor=anchor, days=days, skip=skip, limit=limit
+    ).records
+    return {
+        "anchor": anchor,
+        "windowDays": days,
+        "results": [record.data() for record in records],
+    }

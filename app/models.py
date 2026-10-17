@@ -63,6 +63,27 @@ class DiscoverResponse(BaseModel):
     results: list[DiscoverMovie]
 
 
+class TrendingMovie(MovieSummary):
+    """A trending movie with the two signals its score blends."""
+
+    recentRatings: int
+    pagerank: float
+    score: float
+
+
+class TrendingResponse(BaseModel):
+    """Answer of GET /api/movies/trending.
+
+    `anchor` is the newest RATED timestamp in the data; the window of
+    `windowDays` days ends there, not today (the dataset ends in 2018).
+    Null anchor means an empty graph.
+    """
+
+    anchor: int | None
+    windowDays: int
+    results: list[TrendingMovie]
+
+
 class SimilarResponse(BaseModel):
     """Answer of GET /api/movies/{id}/similar.
 
