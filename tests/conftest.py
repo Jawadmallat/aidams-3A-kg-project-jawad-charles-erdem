@@ -1,15 +1,19 @@
 """Shared pytest fixtures."""
 
 import os
+from pathlib import Path
 
 import pytest
 from neo4j.exceptions import AuthError, ServiceUnavailable
 
 from scripts.db import get_driver
+from scripts.seed_data import read_dataset, reset_graph, seed
+
+FIXTURE_DIR = Path(__file__).parent / "fixtures" / "movielens"
 
 
-@pytest.fixture(scope="session")
-def neo4j_driver():
+@pytest.fixture(scope="session", name="neo4j_driver")
+def fixture_neo4j_driver():
     """Driver for a disposable test database, or skip when none is configured.
 
     Integration tests only run when NEO4J_TEST_URI is set. It is kept separate
@@ -26,3 +30,17 @@ def neo4j_driver():
         pytest.skip(f"Neo4j test database unreachable: {error}")
     yield driver
     driver.close()
+
+
+@pytest.fixture(scope="session", name="fixture_frames")
+def fixture_fixture_frames():
+    """The committed MovieLens test fixture as DataFrames."""
+    return read_dataset(FIXTURE_DIR)
+
+
+@pytest.fixture(scope="session")
+def seeded_graph(neo4j_driver, fixture_frames):
+    """The test database wiped and loaded with the fixture, once per test session."""
+    reset_graph(neo4j_driver)
+    seed(neo4j_driver, fixture_frames)
+    return neo4j_driver
