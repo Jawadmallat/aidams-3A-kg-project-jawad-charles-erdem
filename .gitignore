@@ -1,0 +1,27 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.pytest_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv
+
+# Secrets: never commit (-5 points per exposed secret)
+.env
+.env.*
+!.env.example
+
+# Datasets: downloaded by script, never committed (fixtures live in tests/fixtures/)
+data/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
