@@ -27,7 +27,8 @@ def create_app(driver: Driver | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         owned = driver is None
-        application.state.driver = get_driver() if owned else driver
+        if owned:
+            application.state.driver = get_driver()
         yield
         if owned:
             application.state.driver.close()
@@ -49,6 +50,11 @@ def create_app(driver: Driver | None = None) -> FastAPI:
     async def health() -> dict[str, str]:
         """Liveness probe for container healthchecks; does not touch the database."""
         return {"status": "ok"}
+
+    if driver is not None:
+        # An injected driver is usable immediately, without waiting for the
+        # lifespan; the owner closes it (tests, benchmark).
+        application.state.driver = driver
 
     application.include_router(movies.router)
     return application
