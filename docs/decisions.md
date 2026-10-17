@@ -95,6 +95,18 @@ Ask Part A for any other index an endpoint needs, with the query it serves, so i
 * **`SIMILAR` is directed** (`a` lists `b` among its top 10), and the reverse link may not exist. Query it as `(m)-[:SIMILAR]->(other)` ordered by `score`.
 * **About half of the users share one community** (the widely liked classics), so `discover` for them is close to popularity.
 
+## Benchmark dataset
+
+For performance measurements (PROFILE, latency before and after indexes), use the 5% user sample of `ml-25m`:
+
+```bash
+uv run python scripts/download_data.py --dataset ml-25m
+uv run --env-file .env python -m scripts.seed_data --data-dir data/ml-25m --sample-users 0.05 --seed 42 --reset
+uv run --env-file .env python -m scripts.run_gds
+```
+
+The seed makes the sample reproducible. Result: 8,127 users, 62,423 movies, 1,265,960 ratings, 39,166 tags, 52,660 `SIMILAR` relationships and 15 communities. Loading takes about 40 seconds and GDS about 3 minutes on a laptop. Use a database you do not run the tests against: the tests wipe theirs.
+
 ## Test fixture
 
 `tests/fixtures/movielens/` holds a 20-user, 50-movie subset of ml-latest-small in MovieLens CSV format (regenerate with `python -m scripts.make_fixture`). Facts tests can rely on:
