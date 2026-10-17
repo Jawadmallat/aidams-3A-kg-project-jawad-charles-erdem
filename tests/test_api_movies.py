@@ -50,3 +50,35 @@ def test_similar_unknown_movie_is_404(api_client):
     response = api_client.get("/api/movies/999999/similar")
     assert response.status_code == 404
     assert "999999" in response.json()["detail"]
+
+
+FIXTURE_LAST_RATING = 1519122884  # 2018-02-20, documented in docs/decisions.md
+
+
+def test_trending_anchors_on_the_newest_rating(api_client):
+    """The window ends at the fixture's last rating, not at today."""
+    body = api_client.get("/api/movies/trending").json()
+    assert body["anchor"] == FIXTURE_LAST_RATING
+    assert body["windowDays"] == 365
+    assert body["results"], "a year-long window over a dense fixture is never empty"
+    for movie in body["results"]:
+        assert movie["recentRatings"] >= 1
+
+
+def test_trending_score_blends_volume_and_pagerank(api_client):
+    """score == recentRatings x (1 + pagerank) for every returned movie."""
+    for movie in api_client.get("/api/movies/trending").json()["results"]:
+        expected = round(movie["recentRatings"] * (1 + movie["pagerank"]), 3)
+        assert movie["score"] == expected
+    scores = [m["score"] for m in api_client.get("/api/movies/trending").json()["results"]]
+    assert scores == sorted(scores, reverse=True)
+
+
+def test_trending_pages_are_disjoint_and_deterministic(api_client):
+    """skip/limit pagination slices one stable ordering."""
+    full = api_client.get("/api/movies/trending?limit=10").json()["results"]
+    page1 = api_client.get("/api/movies/trending?skip=0&limit=5").json()["results"]
+    page2 = api_client.get("/api/movies/trending?skip=5&limit=5").json()["results"]
+    assert [m["movieId"] for m in page1] + [m["movieId"] for m in page2] == [
+        m["movieId"] for m in full
+    ]

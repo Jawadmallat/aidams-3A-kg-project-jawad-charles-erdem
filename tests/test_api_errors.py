@@ -74,11 +74,24 @@ def test_discover_validation_rejects_bad_parameters():
         assert client.get(url).status_code == 422, url
 
 
+def test_trending_validation_rejects_bad_parameters():
+    """Validation answers 422 before any query runs."""
+    client = client_with_dead_database()
+    for url in (
+        "/api/movies/trending?days=0",
+        "/api/movies/trending?days=99999",
+        "/api/movies/trending?skip=-1",
+        "/api/movies/trending?limit=0",
+    ):
+        assert client.get(url).status_code == 422, url
+
+
 def test_endpoints_with_dead_database_are_503():
     """Every data endpoint maps a dead database to 503."""
     client = client_with_dead_database()
     for url in (
         "/api/movies/1/similar",
+        "/api/movies/trending",
         "/api/users/1/recommendations",
         "/api/users/1/discover",
     ):
