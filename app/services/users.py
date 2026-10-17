@@ -15,7 +15,7 @@ PEER_LIMIT = 25
 
 USER_QUERY = """
 MATCH (u:User {userId: $userId})
-RETURN u.userId AS userId
+RETURN u.userId AS userId, u.community AS community
 """
 
 # Collaborative filtering in one statement, staged with scoped CALL {}
@@ -60,6 +60,23 @@ LIMIT $limit
 """
 
 
+# Discovery outside the user's history: unseen movies from the Louvain
+# community the user's liked movies mostly belong to, most central first.
+# Entered through the user's community id (indexed), never by expanding a
+# community to everything unbounded; LIMIT caps the page.
+DISCOVER_QUERY = """
+MATCH (me:User {userId: $userId})
+WHERE me.community IS NOT NULL
+MATCH (rec:Movie {community: me.community})
+WHERE NOT EXISTS { (me)-[:RATED]->(rec) }
+RETURN rec.movieId AS movieId, rec.title AS title, rec.year AS year,
+       rec.genres AS genres, rec.community AS community,
+       round(coalesce(rec.pagerank, 0.0), 4) AS pagerank
+ORDER BY pagerank DESC, movieId
+SKIP $skip LIMIT $limit
+"""
+
+
 def find_user(driver: Driver, user_id: int) -> dict | None:
     """Return a user's id, or None when the id is unknown."""
     records = driver.execute_query(USER_QUERY, userId=user_id).records
@@ -83,5 +100,21 @@ def recommendations(driver: Driver, user_id: int, limit: int) -> dict | None:
         liked=LIKED_THRESHOLD,
         genreBoost=GENRE_BOOST,
         peerLimit=PEER_LIMIT,
+    ).records
+    return {"userId": user["userId"], "results": [record.data() for record in records]}
+
+
+def discover(driver: Driver, user_id: int, skip: int, limit: int) -> dict | None:
+    """Unseen movies from the user's community; None when the user is unknown.
+
+    A user without a community (none of their liked movies has one, see
+    docs/decisions.md) is a known user with an empty page and community null.
+    """
+    user = find_user(driver, user_id)
+    if user is None:
+        return None
+
+    records = driver.execute_query(
+        DISCOVER_QUERY, userId=user_id, skip=skip, limit=limit
     ).records
     return {**user, "results": [record.data() for record in records]}

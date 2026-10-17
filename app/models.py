@@ -44,6 +44,25 @@ class RecommendationsResponse(BaseModel):
     results: list[Recommendation]
 
 
+class DiscoverMovie(MovieSummary):
+    """A community pick: central (PageRank) in the user's Louvain community."""
+
+    community: int
+    pagerank: float
+
+
+class DiscoverResponse(BaseModel):
+    """Answer of GET /api/users/{id}/discover.
+
+    `community` is the user's Louvain community; null when none of their
+    liked movies has one, in which case `results` is empty.
+    """
+
+    userId: int
+    community: int | None
+    results: list[DiscoverMovie]
+
+
 class SimilarResponse(BaseModel):
     """Answer of GET /api/movies/{id}/similar.
 
