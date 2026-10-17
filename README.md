@@ -46,3 +46,8 @@ uv sync   # create .venv and install the locked dependencies
 ```
 
 Installation, Docker, API examples, the graph schema, the architecture and the modeling rationale will be documented here as the project progresses.
+
+## Appendix: our schema versus an AI-generated one
+
+We asked ChatGPT (free tier, temporary chat) for a Neo4j schema from the project description alone, ran its key choices on our data, and compared. It agrees with our core model (ratings as relationships, Genre nodes, precomputed top-k similarity, the same uniqueness constraints). It differs where the data decides: its PageRank on the rating graph ranks movies almost exactly by number of ratings (rank correlation 0.968, against 0.145 for ours on `SIMILAR`); it keeps the year inside titles and ignores duplicate titles; and it models sparse tags as two extra node types. One of its ideas was adopted: a full-text index on tags. Full comparison, prompt and evidence: [docs/anti_genericity.md](docs/anti_genericity.md).
+
