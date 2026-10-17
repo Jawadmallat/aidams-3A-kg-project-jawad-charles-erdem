@@ -4,9 +4,12 @@ import os
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 from neo4j.exceptions import AuthError, ServiceUnavailable
 
+from app.main import create_app
 from scripts.db import get_driver
+from scripts.run_gds import run_gds
 from scripts.seed_data import read_dataset, reset_graph, seed
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "movielens"
@@ -44,3 +47,22 @@ def seeded_graph(neo4j_driver, fixture_frames):
     reset_graph(neo4j_driver)
     seed(neo4j_driver, fixture_frames)
     return neo4j_driver
+
+
+@pytest.fixture(scope="session", name="recommender_graph")
+def fixture_recommender_graph(seeded_graph):
+    """The seeded graph with GDS results written.
+
+    Safe at session scope: run_gds replaces its previous output and is
+    deterministic on the same graph (proven by the GDS integration tests).
+    """
+    run_gds(seeded_graph)
+    return seeded_graph
+
+
+@pytest.fixture(scope="session", name="api_client")
+def fixture_api_client(recommender_graph):
+    """A TestClient over the app wired to the seeded test database."""
+    application = create_app(driver=recommender_graph)
+    with TestClient(application) as client:
+        yield client

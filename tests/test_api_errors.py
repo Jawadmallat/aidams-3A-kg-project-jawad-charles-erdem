@@ -41,6 +41,24 @@ def test_unknown_route_is_404():
     assert client_with_dead_database().get("/api/nope").status_code == 404
 
 
+def test_similar_validation_rejects_bad_parameters():
+    """Validation answers 422 before any query runs (the driver here would raise)."""
+    client = client_with_dead_database()
+    for url in (
+        "/api/movies/abc/similar",      # non-integer id
+        "/api/movies/1/similar?limit=0",    # below ge=1
+        "/api/movies/1/similar?limit=999",  # above le=50
+    ):
+        assert client.get(url).status_code == 422, url
+
+
+def test_similar_with_dead_database_is_503():
+    """The real endpoint maps a dead database to 503."""
+    response = client_with_dead_database().get("/api/movies/1/similar")
+    assert response.status_code == 503
+    assert response.json() == {"detail": "database unavailable"}
+
+
 def make_probe(error: Exception):
     """A parameterless route body standing in for any endpoint that queries Neo4j."""
     async def probe():
