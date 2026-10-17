@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from neo4j import Driver
 from neo4j.exceptions import ServiceUnavailable, SessionExpired
 
+from app.routers import movies
 from scripts.db import get_driver
 
 
@@ -49,6 +50,7 @@ def create_app(driver: Driver | None = None) -> FastAPI:
         """Liveness probe for container healthchecks; does not touch the database."""
         return {"status": "ok"}
 
+    application.include_router(movies.router)
     return application
 
 
