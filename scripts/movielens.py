@@ -8,6 +8,10 @@ import re
 
 NO_GENRES = "(no genres listed)"
 
+# A rating at or above this counts as "the user liked the movie", project-wide
+# (similarity input, user communities, recommendations, ML label).
+LIKED_THRESHOLD = 4.0
+
 # Articles MovieLens moves to the end of a title ("Matrix, The"). Case-sensitive on
 # purpose: "Good, the Bad and the Ugly, The" must only move the final "The".
 ARTICLES = (

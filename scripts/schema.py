@@ -36,6 +36,11 @@ INDEXES = {
                        "FOR ()-[r:RATED]-() ON (r.timestamp)",
     # "Movies tagged X" without scanning every TAGGED relationship.
     "tagged_tag": "CREATE INDEX tagged_tag IF NOT EXISTS FOR ()-[t:TAGGED]-() ON (t.tag)",
+    # Written by scripts/run_gds.py. Community lookups ("other movies in this
+    # user's community") and PageRank ordering for trending.
+    "movie_community": "CREATE INDEX movie_community IF NOT EXISTS FOR (m:Movie) ON (m.community)",
+    "movie_pagerank": "CREATE INDEX movie_pagerank IF NOT EXISTS FOR (m:Movie) ON (m.pagerank)",
+    "user_community": "CREATE INDEX user_community IF NOT EXISTS FOR (u:User) ON (u.community)",
 }
 
 
