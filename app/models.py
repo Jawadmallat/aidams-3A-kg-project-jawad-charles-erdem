@@ -25,6 +25,25 @@ class SimilarMovie(MovieSummary):
     score: float
 
 
+class Recommendation(MovieSummary):
+    """A recommended movie with the evidence behind its score."""
+
+    score: float
+    peerCount: int
+    genreMatches: int
+
+
+class RecommendationsResponse(BaseModel):
+    """Answer of GET /api/users/{id}/recommendations.
+
+    An empty `results` means the user is known but has nothing left to be
+    recommended (rated everything, or no like-minded users yet).
+    """
+
+    userId: int
+    results: list[Recommendation]
+
+
 class SimilarResponse(BaseModel):
     """Answer of GET /api/movies/{id}/similar.
 
