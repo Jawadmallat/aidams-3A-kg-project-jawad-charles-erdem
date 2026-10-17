@@ -1,16 +1,18 @@
 # Movie Recommender in Production
 
+[![CI](https://github.com/Jawadmallat/aidams-3A-kg-project-jawad-charles-erdem/actions/workflows/ci.yml/badge.svg)](https://github.com/Jawadmallat/aidams-3A-kg-project-jawad-charles-erdem/actions/workflows/ci.yml)
+
 A graph-backed movie recommendation service built on Neo4j, Graph Data Science and FastAPI, using the MovieLens dataset. It includes an NL-to-Cypher endpoint and a "Why was this recommended?" endpoint whose explanations rest on actual graph paths.
 
 AIDAMS 3A, Graph Databases project 4 (level 2).
 
 ## Team
 
-| Member  | Role                                  |
-|---------|---------------------------------------|
-| Jawad   | A: data, graph modeling, GDS and ML   |
-| Charles | TBD                                   |
-| Erdem   | TBD                                   |
+| Member  | Role                                        |
+|---------|---------------------------------------------|
+| Jawad   | A: data, graph modeling, GDS and ML         |
+| Erdem   | B: API, Cypher, performance, infrastructure |
+| Charles | C: agentic component, documentation, quality |
 
 ## Dataset
 
@@ -37,15 +39,59 @@ uv run python scripts/download_data.py --dataset ml-25m   # about 250 MB
 
 The cleaning rules, the graph schema and the reasons behind them are in [docs/modeling.md](docs/modeling.md); the conventions the API relies on are in [docs/decisions.md](docs/decisions.md).
 
-## Getting started
+## Quickstart (Docker Compose)
+
+The whole stack - Neo4j 5.26 with the GDS and APOC plugins, the API, and Nginx as the only published entry point - runs through Compose:
+
+```bash
+cp .env.example .env            # set NEO4J_PASSWORD
+docker compose up --build -d    # first boot downloads the Neo4j plugins (~2 min)
+
+# load MovieLens inside the stack (safe to re-run)
+docker compose exec api uv run python scripts/download_data.py
+docker compose exec api uv run python -m scripts.seed_data
+docker compose exec api uv run python -m scripts.run_gds
+
+curl http://localhost:8080/api/movies/1/similar
+```
+
+Swagger UI: <http://localhost:8080/docs>. Only Nginx publishes a port (8080): Neo4j and the API are reachable solely on the internal network, and the proxy routes an allowlist (`/api/`, `/docs`, `/openapi.json`) - everything else 404s at the edge. For development against the containerized Neo4j, the overlay `docker-compose.dev.yml` publishes 7474/7687.
+
+## API
+
+| Endpoint | What it answers | Technique |
+|---|---|---|
+| `GET /api/movies/{id}/similar` | movies most like this one | precomputed GDS `SIMILAR` (Jaccard top-10); live co-rating Jaccard fallback for movies with fewer than 10 likes - the `source` field names the branch taken |
+| `GET /api/users/{id}/recommendations` | personal picks | collaborative filtering: the 25 most like-minded users' likes, minus movies already seen, boosted 1 + 0.25 per shared top genre; `peerCount` and `genreMatches` carry the evidence |
+| `GET /api/users/{id}/discover` | something outside the usual | unseen movies of the user's Louvain community, most central (PageRank) first |
+| `GET /api/movies/trending` | popular and central | rating volume in a window ending at the newest rating in the data (the dataset ends in 2018; the `anchor` field makes that explicit), blended as `volume x (1 + pagerank)` |
+
+```bash
+curl 'http://localhost:8080/api/users/1/recommendations?limit=5'
+curl 'http://localhost:8080/api/users/1/discover?skip=0&limit=10'
+curl 'http://localhost:8080/api/movies/trending?days=365&limit=10'
+```
+
+Conventions: ids are integers; unknown user or movie answers 404 naming the id; a known user with nothing left to recommend answers 200 with an empty list; invalid parameters answer 422; a dead database answers 503. `skip`/`limit` pagination is capped (max 50) and deterministic (stable tiebreak on `movieId`), so pages never overlap.
+
+The Cypher behind the endpoints uses scoped `CALL {}` subqueries, `EXISTS {}` / `COUNT {}` subqueries, list-comprehension predicates and multi-stage `WITH` aggregations deliberately - `app/services/*.py` keeps each query as one documented constant, and `app/services/paths.py` exposes the graph-path evidence the "why was this recommended" endpoint builds on.
+
+## Performance
+
+Measured on the ml-25m 5% sample (1,265,960 ratings): precomputed similar answers in ~3 ms p50 where the live fallback needs ~116 ms - the argument for precomputing `SIMILAR`; trending dropped from 180 ms to 30 ms p50 once `PROFILE` showed its anchor query scanning every rating (now 2 db hits through the `rated_timestamp` index). Full tables, the PROFILE plans before and after, and how to reproduce: [docs/performance.md](docs/performance.md).
+
+## Local development
 
 The project uses [uv](https://docs.astral.sh/uv/) for Python and dependency management (Python 3.12).
 
 ```bash
-uv sync   # create .venv and install the locked dependencies
+uv sync      # create .venv and install the locked dependencies
+make help    # every target: run, seed, gds, test, lint, benchmark, docker-*
+make test    # pytest with coverage (integration tests need NEO4J_TEST_URI)
+make lint    # pylint over app, scripts and tests; fails under 9.5
 ```
 
-Installation, Docker, API examples, the graph schema, the architecture and the modeling rationale will be documented here as the project progresses.
+Credentials come from `.env` (never committed; copy `.env.example`). The two-container setup for local Neo4j, the graph contract and every data convention the queries follow are in [docs/decisions.md](docs/decisions.md); the modeling rationale is in [docs/modeling.md](docs/modeling.md).
 
 ## Appendix: our schema versus an AI-generated one
 
