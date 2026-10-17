@@ -1,0 +1,64 @@
+<mxfile host="drawio" agent="kg-project">
+  <diagram id="graph-schema" name="Graph schema">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1180" pageHeight="600" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="&lt;b&gt;Movie recommender: Neo4j graph schema&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#52514e&quot;&gt;MovieLens data in dark text; properties and relationships computed by scripts/run_gds.py in blue&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=top;fontSize=16;fontColor=#0b0b0b;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="900" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="user" value="&lt;b style=&quot;font-size:16px&quot;&gt;:User&lt;/b&gt;&lt;hr&gt;userId: INTEGER &lt;i&gt;(unique)&lt;/i&gt;&lt;br&gt;&lt;font color=&quot;#2a78d6&quot;&gt;community: INTEGER&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=12;spacingTop=6;arcSize=8;fillColor=#fcfcfb;strokeColor=#0b0b0b;strokeWidth=2;fontSize=13;fontColor=#0b0b0b;" vertex="1" parent="1">
+          <mxGeometry x="40" y="210" width="220" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="movie" value="&lt;b style=&quot;font-size:16px&quot;&gt;:Movie&lt;/b&gt;&lt;hr&gt;movieId: INTEGER &lt;i&gt;(unique)&lt;/i&gt;&lt;br&gt;title: STRING &lt;i&gt;(full-text index, not unique)&lt;/i&gt;&lt;br&gt;year: INTEGER? &lt;i&gt;(range index)&lt;/i&gt;&lt;br&gt;genres: LIST&amp;lt;STRING&amp;gt;&lt;br&gt;imdbId: STRING &lt;i&gt;(tt0114709)&lt;/i&gt;&lt;br&gt;tmdbId: INTEGER?&lt;br&gt;&lt;font color=&quot;#2a78d6&quot;&gt;community: INTEGER? &lt;i&gt;(Louvain)&lt;/i&gt;&lt;br&gt;pagerank: FLOAT? &lt;i&gt;(PageRank)&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=12;spacingTop=6;arcSize=5;fillColor=#fcfcfb;strokeColor=#0b0b0b;strokeWidth=2;fontSize=13;fontColor=#0b0b0b;" vertex="1" parent="1">
+          <mxGeometry x="540" y="180" width="320" height="200" as="geometry" />
+        </mxCell>
+
+        <mxCell id="genre" value="&lt;b style=&quot;font-size:16px&quot;&gt;:Genre&lt;/b&gt;&lt;hr&gt;name: STRING &lt;i&gt;(unique)&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=12;spacingTop=6;arcSize=10;fillColor=#fcfcfb;strokeColor=#0b0b0b;strokeWidth=2;fontSize=13;fontColor=#0b0b0b;" vertex="1" parent="1">
+          <mxGeometry x="960" y="250" width="180" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="rated" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#0b0b0b;strokeWidth=2;exitX=1;exitY=0.364;entryX=0;entryY=0.35;" edge="1" parent="1" source="user" target="movie">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="tagged" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#0b0b0b;strokeWidth=2;exitX=1;exitY=0.818;entryX=0;entryY=0.6;" edge="1" parent="1" source="user" target="movie">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ingenre" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#0b0b0b;strokeWidth=2;exitX=1;exitY=0.55;entryX=0;entryY=0.5;" edge="1" parent="1" source="movie" target="genre">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="similar" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#2a78d6;strokeWidth=2;dashed=1;exitX=0.3;exitY=0;entryX=0.7;entryY=0;" edge="1" parent="1" source="movie" target="movie">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="636" y="135" />
+              <mxPoint x="764" y="135" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+
+        <mxCell id="rated-label" value="&lt;b&gt;RATED&lt;/b&gt;&lt;br&gt;rating: FLOAT (0.5 to 5.0)&lt;br&gt;timestamp: INTEGER &lt;i&gt;(range index)&lt;/i&gt;" style="text;html=1;align=center;verticalAlign=bottom;fontSize=12;fontColor=#0b0b0b;" vertex="1" parent="1">
+          <mxGeometry x="270" y="190" width="260" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="tagged-label" value="&lt;b&gt;TAGGED&lt;/b&gt;&lt;br&gt;tag: STRING &lt;i&gt;(lower-case, index)&lt;/i&gt;&lt;br&gt;timestamp: INTEGER" style="text;html=1;align=center;verticalAlign=top;fontSize=12;fontColor=#0b0b0b;" vertex="1" parent="1">
+          <mxGeometry x="270" y="305" width="260" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="ingenre-label" value="&lt;b&gt;IN_GENRE&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=bottom;fontSize=12;fontColor=#0b0b0b;" vertex="1" parent="1">
+          <mxGeometry x="862" y="266" width="96" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="similar-label" value="&lt;b&gt;SIMILAR&lt;/b&gt; (Movie to Movie)&lt;br&gt;score: FLOAT (Jaccard, 0 to 1)&lt;br&gt;&lt;i&gt;top 10 per movie, movies with 10+ likes&lt;/i&gt;" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontColor=#2a78d6;" vertex="1" parent="1">
+          <mxGeometry x="785" y="105" width="300" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="notes" value="&lt;b&gt;Modeling notes&lt;/b&gt;&lt;br&gt;• Ratings are relationships, not nodes: one rating links exactly one user to one movie, and traversals stay one hop.&lt;br&gt;• Genres exist twice on purpose: Genre nodes for traversals, paths and GDS; the genres list for cheap filtering. Both written by the same seed step.&lt;br&gt;• Tags are a property of TAGGED, so each tag keeps who tagged which movie. A shared Tag node would lose that.&lt;br&gt;• SIMILAR is precomputed by Node Similarity on likes (rating ≥ 4.0), so /similar reads at most 10 relationships.&lt;br&gt;• Constraints: User.userId, Movie.movieId, Genre.name. Indexes: title (full-text), year, RATED.timestamp, TAGGED.tag, community, pagerank." style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=12;spacingRight=12;spacingTop=8;arcSize=4;fillColor=#f4f4f2;strokeColor=#b9b8b3;fontSize=12;fontColor=#0b0b0b;" vertex="1" parent="1">
+          <mxGeometry x="40" y="440" width="1100" height="120" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
