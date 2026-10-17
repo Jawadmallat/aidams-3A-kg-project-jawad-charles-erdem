@@ -80,6 +80,21 @@ The Cypher behind the endpoints uses scoped `CALL {}` subqueries, `EXISTS {}` / 
 
 Measured on the ml-25m 5% sample (1,265,960 ratings): precomputed similar answers in ~3 ms p50 where the live fallback needs ~116 ms - the argument for precomputing `SIMILAR`; trending dropped from 180 ms to 30 ms p50 once `PROFILE` showed its anchor query scanning every rating (now 2 db hits through the `rated_timestamp` index). Full tables, the PROFILE plans before and after, and how to reproduce: [docs/performance.md](docs/performance.md).
 
+## Public image
+
+The API image is published to Docker Hub so the stack can run without building:
+
+```bash
+docker pull <dockerhub-user>/movie-recommender-api   # link added once published
+```
+
+Publishing is a manual, deliberate step (nothing in CI pushes images):
+
+```bash
+docker login
+make docker-build docker-push DOCKER_USER=<dockerhub-user>
+```
+
 ## Local development
 
 The project uses [uv](https://docs.astral.sh/uv/) for Python and dependency management (Python 3.12).
