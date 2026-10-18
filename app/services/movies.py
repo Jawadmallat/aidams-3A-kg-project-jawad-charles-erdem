@@ -1,4 +1,4 @@
-"""Movie queries: similarity now, trending later in the stage.
+"""Movie queries: similarity (with its live fallback) and trending.
 
 Services return plain dicts (the driver's record data); routers turn them into
 the response models. Every function takes the driver first, like run_gds, so

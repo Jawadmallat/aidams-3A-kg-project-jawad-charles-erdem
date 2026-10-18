@@ -1,4 +1,4 @@
-"""Movie endpoints: /api/movies/{id}/similar now, /api/movies/trending later."""
+"""Movie endpoints: similar movies and trending."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from neo4j import Driver
