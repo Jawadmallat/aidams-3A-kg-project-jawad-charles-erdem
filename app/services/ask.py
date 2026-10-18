@@ -56,7 +56,8 @@ Rules:
 - Put every value taken from the question in `params` and reference it as
   $name in the query (titles, tags, genres, ids, years, thresholds).
 - Return named columns (RETURN m.title AS title), not whole nodes, and end
-  with ORDER BY and LIMIT (at most {MAX_LIMIT}).
+  with ORDER BY and LIMIT (at most {MAX_LIMIT}). Return as many rows as the
+  question asks for: "which movie" is LIMIT 1, "which 5 movies" is LIMIT 5.
 - If the graph cannot answer the question (actors, directors, box office,
   plot...), set "cypher" to "" and say why in "explanation".
 - "explanation" is one or two sentences saying what the query computes.

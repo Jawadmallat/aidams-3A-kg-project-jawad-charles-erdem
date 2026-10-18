@@ -74,9 +74,13 @@ CONVENTIONS = (
     f"\"Liked\" means a RATED relationship with rating >= {LIKED_THRESHOLD}.",
     "\"Recent\" is measured from the newest RATED.timestamp in the data, not from "
     "today (the data ends in 2018): anchor windows on max(r.timestamp).",
-    "Titles are not unique and have no year. Find a movie by title with "
-    "CALL db.index.fulltext.queryNodes('movie_title_fulltext', $text) "
-    "YIELD node, score, and filter on node.year when the year is known.",
+    "Titles are not unique and have no year. To find ONE movie the question "
+    "names, keep only the best full-text match: "
+    "CALL db.index.fulltext.queryNodes('movie_title_fulltext', $title) "
+    "YIELD node, score WITH node AS m, score ORDER BY score DESC LIMIT 1 "
+    "(filter WHERE node.year = $year before the ORDER BY when the year is known). "
+    "The full-text index matches ANY of the words, so never use it to list "
+    "titles containing a phrase: use m.title CONTAINS $text for that.",
     "Filter a movie you already matched by genre with 'Comedy' IN m.genres; use "
     "(m)-[:IN_GENRE]->(:Genre {name: ...}) when the genre is part of the path.",
     "Tags are a property of TAGGED, not nodes: (u:User)-[t:TAGGED]->(m:Movie) "
