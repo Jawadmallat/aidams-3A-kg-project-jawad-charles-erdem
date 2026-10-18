@@ -41,6 +41,11 @@ NO_EVIDENCE_NOTE = (
 )
 
 
+UNVERIFIED_NOTE = (
+    "UNVERIFIED: the AI summary states {claims}, which the graph paths do not "
+    "contain. Trust the paths, not the summary."
+)
+
 ALREADY_RATED_NOTE = (
     "This user already rated this movie ({rating}), so /recommendations would "
     "not suggest it; the paths show what links them anyway."
@@ -108,6 +113,8 @@ def explain_recommendation(driver: Driver, user_id: int, movie_id: int) -> dict:
         summary, note = summarize(evidence, movie["title"])
         if summary is not None:
             summary_check = check_summary(summary, evidence, user_id, movie)
+            if not summary_check["verified"]:
+                note = UNVERIFIED_NOTE.format(claims=", ".join(summary_check["unsupported"]))
     if movie["rating"] is not None and note is None:
         note = ALREADY_RATED_NOTE.format(rating=movie["rating"])
     return {

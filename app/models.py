@@ -194,7 +194,9 @@ class WhyResponse(BaseModel):
     `paths` are verified facts from the graph and are the explanation;
     `summary` is an AI rewording of them (null when there is no evidence,
     no LLM, or the LLM failed; `note` then says why), checked by
-    `summaryCheck`. `alreadyRated` is the user's rating if they rated it.
+    `summaryCheck`. A summary that fails the check is kept, flagged
+    `verified: false`, and `note` starts with "UNVERIFIED" naming the
+    unsupported claims. `alreadyRated` is the user's rating if they rated it.
     """
 
     userId: int

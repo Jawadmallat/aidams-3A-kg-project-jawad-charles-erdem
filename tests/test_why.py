@@ -179,6 +179,9 @@ def test_an_unverified_summary_is_returned_flagged(setup):
     client, _ = setup(summary="You and user 414 both liked 999 movies.")
     body = client.get("/api/users/1/recommendations/589/why").json()
     assert body["summaryCheck"] == {"verified": False, "unsupported": ["999"]}
+    assert body["summary"] == "You and user 414 both liked 999 movies."
+    assert body["note"].startswith("UNVERIFIED")
+    assert "999" in body["note"]
 
 
 def test_the_llm_only_sees_the_evidence(setup, monkeypatch):
