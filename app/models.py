@@ -147,3 +147,63 @@ class AskResponse(BaseModel):
     truncated: bool
     attempts: int
     model: str
+
+
+class WhyPeer(BaseModel):
+    """A like-minded user: liked the movie and shares liked movies with the user."""
+
+    peerId: int
+    sharedCount: int
+    sharedTitles: list[str]
+
+
+class WhyGenre(BaseModel):
+    """A genre path: the user liked movies in a genre the movie belongs to."""
+
+    genre: str
+    likedMoviesInGenre: int
+
+
+class WhyPaths(BaseModel):
+    """The graph paths behind a recommendation, read from Neo4j (verified)."""
+
+    peers: list[WhyPeer]
+    sharedGenres: list[WhyGenre]
+
+
+class SummaryCheck(BaseModel):
+    """Fact check of the AI summary against the paths.
+
+    `unsupported` lists the numbers and genres the summary states that do
+    not appear in the paths; `verified` is true when there are none.
+    """
+
+    verified: bool
+    unsupported: list[str]
+
+
+class WhySummary(BaseModel):
+    """What the LLM must answer for the why endpoint: prose only."""
+
+    summary: str
+
+
+class WhyResponse(BaseModel):
+    """Answer of GET /api/users/{id}/recommendations/{movie_id}/why.
+
+    `paths` are verified facts from the graph and are the explanation;
+    `summary` is an AI rewording of them (null when there is no evidence,
+    no LLM, or the LLM failed; `note` then says why), checked by
+    `summaryCheck`. `alreadyRated` is the user's rating if they rated it.
+    """
+
+    userId: int
+    movieId: int
+    title: str
+    alreadyRated: float | None
+    hasEvidence: bool
+    paths: WhyPaths
+    summary: str | None
+    summarySource: Literal["llm"] | None
+    summaryCheck: SummaryCheck | None
+    note: str | None
