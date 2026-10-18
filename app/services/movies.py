@@ -27,15 +27,18 @@ LIMIT $limit
 
 # Fallback for movies with fewer than 10 likes, which get no SIMILAR from GDS:
 # the same Jaccard measure (shared likers over the union of likers), computed
-# live. Cost is bounded by the movie's audience, under 10 likers by definition.
+# live. The traversal is bounded by the movie's audience (under 10 likers by
+# definition); the denominators read the likesCount property run_gds stores,
+# because counting a popular candidate's raters per request dominated the cost
+# (520,865 db hits for one movie on the ml-25m sample - review finding on
+# PR #2, evidence in docs/performance.md). Like every GDS-derived value, the
+# counts are as fresh as the last run_gds run.
 SIMILAR_FALLBACK_QUERY = """
-MATCH (m:Movie {movieId: $movieId})
-WITH m, COUNT { (m)<-[r:RATED]-(:User) WHERE r.rating >= $liked } AS mLikes
-MATCH (m)<-[r1:RATED]-(u:User)-[r2:RATED]->(other:Movie)
+MATCH (m:Movie {movieId: $movieId})<-[r1:RATED]-(u:User)-[r2:RATED]->(other:Movie)
 WHERE r1.rating >= $liked AND r2.rating >= $liked
-WITH other, mLikes, count(DISTINCT u) AS shared
+WITH m, other, count(DISTINCT u) AS shared
 WITH other, shared, toFloat(shared) /
-     (mLikes + COUNT { (other)<-[r:RATED]-(:User) WHERE r.rating >= $liked } - shared) AS score
+     (coalesce(m.likesCount, 0) + coalesce(other.likesCount, 0) - shared) AS score
 ORDER BY score DESC, shared DESC, other.movieId
 LIMIT $limit
 RETURN other.movieId AS movieId, other.title AS title, other.year AS year,
