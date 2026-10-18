@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from neo4j import Driver
 from neo4j.exceptions import ServiceUnavailable, SessionExpired
 
-from app.routers import movies, users
+from app.routers import ask, movies, users
 from scripts.db import get_driver
 
 
@@ -58,6 +58,7 @@ def create_app(driver: Driver | None = None) -> FastAPI:
 
     application.include_router(movies.router)
     application.include_router(users.router)
+    application.include_router(ask.router)
     return application
 
 
