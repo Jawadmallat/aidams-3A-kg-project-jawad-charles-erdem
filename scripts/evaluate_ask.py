@@ -21,7 +21,7 @@ in docs/evaluation.md come only from those generated reports.
 import argparse
 import hashlib
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -56,7 +56,7 @@ class Question:
     expect: str                 # "answer", "no_answer" or "safe"
     reference: str = ""         # Cypher whose key column is the expected answer
     key: str = ""               # column of `reference` to look for in the answer
-    params: dict = field(default_factory=dict)
+    held_out: bool = False      # written after the prompt was tuned on the others
 
 
 QUESTIONS = [
@@ -127,6 +127,38 @@ QUESTIONS = [
              "MATCH (:Movie {movieId: 2571})<-[r1:RATED]-(u:User)-[r2:RATED]->(o:Movie) "
              "WHERE r1.rating >= 4.0 AND r2.rating >= 4.0 AND o.movieId <> 2571 "
              "WITH o, count(u) AS n RETURN o.title AS title ORDER BY n DESC LIMIT 1", "title"),
+    # Held-out set: written on 2026-10-18 after the prompt had been tuned on
+    # Q01-Q18, and never used to change the prompt or the pipeline.
+    Question("H01", "aggregation", "How many ratings did Pulp Fiction receive?", "answer",
+             "MATCH (:Movie {movieId: 296})<-[r:RATED]-() RETURN count(r) AS n", "n",
+             held_out=True),
+    Question("H02", "similarity (GDS)", "Which 3 movies are most similar to Toy Story?",
+             "answer",
+             "MATCH (:Movie {movieId: 1})-[s:SIMILAR]->(o:Movie) "
+             "RETURN o.title AS title ORDER BY s.score DESC LIMIT 3", "title", held_out=True),
+    Question("H03", "lookup", "In what year was Heat released?", "answer",
+             "MATCH (m:Movie {movieId: 6}) RETURN m.year AS year", "year", held_out=True),
+    Question("H04", "aggregation", "Which 5 users gave the most 5-star ratings?", "answer",
+             "MATCH (u:User)-[r:RATED {rating: 5.0}]->() WITH u, count(r) AS n "
+             "RETURN u.userId AS userId ORDER BY n DESC LIMIT 5", "userId", held_out=True),
+    Question("H05", "genre", "How many movies are both Animation and Children movies?",
+             "answer",
+             "MATCH (m:Movie) WHERE 'Animation' IN m.genres AND 'Children' IN m.genres "
+             "RETURN count(m) AS n", "n", held_out=True),
+    Question("H06", "lookup", "Which genres is Alien in?", "answer",
+             "MATCH (:Movie {movieId: 1214})-[:IN_GENRE]->(g:Genre) RETURN g.name AS genre",
+             "genre", held_out=True),
+    Question("H07", "user", "What is the average rating given by user 414?", "answer",
+             "MATCH (:User {userId: 414})-[r:RATED]->() RETURN avg(r.rating) AS avg", "avg",
+             held_out=True),
+    Question("H08", "multi-hop", "How many users gave The Godfather at least 4 stars?",
+             "answer",
+             "MATCH (:Movie {movieId: 858})<-[r:RATED]-() WHERE r.rating >= 4.0 "
+             "RETURN count(r) AS n", "n", held_out=True),
+    Question("H09", "filter", "What is the oldest release year of any movie in the database?",
+             "answer",
+             "MATCH (m:Movie) WHERE m.year IS NOT NULL RETURN min(m.year) AS year", "year",
+             held_out=True),
     Question("U01", "unanswerable", "Who directed Pulp Fiction?", "no_answer"),
     Question("U02", "unanswerable", "How much money did Titanic make at the box office?",
              "no_answer"),
@@ -240,19 +272,27 @@ def prompt_fingerprint() -> str:
     return hashlib.sha256(ask.SYSTEM_PROMPT.encode()).hexdigest()[:8]
 
 
+def _score(results: list[dict]) -> str:
+    """'correct / total (partial: n)' for a set of answerable questions."""
+    correct = sum(r["verdict"] == "correct" for r in results)
+    partial = sum(r["verdict"] == "partial" for r in results)
+    return f"{correct} / {len(results)} (partial: {partial})"
+
+
 def _summary_rows(results: list[dict], sizes: tuple) -> list[str]:
     """The rows of the summary table."""
     by_expect = {expect: [r for r in results if r["question"].expect == expect]
                  for expect in ("answer", "no_answer", "safe")}
-    answerable, adversarial = by_expect["answer"], by_expect["safe"]
+    adversarial = by_expect["safe"]
+    tuned = [r for r in by_expect["answer"] if not r["question"].held_out]
+    held_out = [r for r in by_expect["answer"] if r["question"].held_out]
     latencies = sorted(r["latency_s"] for r in results)
     before, after = sizes
     return [
         "| Measure | Result |",
         "|---|---|",
-        f"| Answerable questions correct | "
-        f"{sum(r['verdict'] == 'correct' for r in answerable)} / {len(answerable)} "
-        f"(partial: {sum(r['verdict'] == 'partial' for r in answerable)}) |",
+        f"| Answerable, tuning set (Q): correct | {_score(tuned)} |",
+        f"| Answerable, held-out set (H): correct | {_score(held_out)} |",
         f"| Unanswerable and trap questions not answered (declined or rejected) | "
         f"{sum(r['verdict'] == 'correct' for r in by_expect['no_answer'])} / "
         f"{len(by_expect['no_answer'])} |",

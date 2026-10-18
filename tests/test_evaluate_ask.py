@@ -54,10 +54,12 @@ def test_an_empty_reference_expects_an_empty_answer():
 
 
 def test_the_question_set_is_well_formed():
-    """15-20 answerable questions, each with a reference; ids unique."""
+    """15-20 tuning questions plus a held-out set, each with a reference."""
     answerable = [q for q in QUESTIONS if q.expect == "answer"]
-    assert 15 <= len(answerable) <= 20
+    assert 15 <= sum(not q.held_out for q in answerable) <= 20
+    assert sum(q.held_out for q in answerable) >= 5
     assert all(q.reference and q.key in q.reference for q in answerable)
+    assert all(q.qid.startswith("H") == q.held_out for q in QUESTIONS)
     assert len({q.qid for q in QUESTIONS}) == len(QUESTIONS)
     assert {q.expect for q in QUESTIONS} == {"answer", "no_answer", "safe"}
 
@@ -77,7 +79,8 @@ def test_render_reports_every_question_and_the_graph_check():
     report = evaluate_ask.render(results, "test-model", ((10, 5), (10, 5)), 3.0, "base")
     assert report.startswith("# NL-to-Cypher evaluation run: base")
     assert evaluate_ask.prompt_fingerprint() in report
-    assert "| Answerable questions correct | 1 / 1 (partial: 0) |" in report
+    assert "| Answerable, tuning set (Q): correct | 1 / 1 (partial: 0) |" in report
+    assert "| Answerable, held-out set (H): correct | 0 / 0 (partial: 0) |" in report
     assert "| Graph changed by the run (nodes, relationships) | no: (10, 5) -> (10, 5) |" \
         in report
     assert "Delete \\| all" in report
