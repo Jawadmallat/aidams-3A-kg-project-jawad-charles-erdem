@@ -52,7 +52,7 @@ sequenceDiagram
     A-->>C: rows + cypher + params + checks + resolvedMovies + explanation
 ```
 
-Status codes: 200 (answered, or `answered: false` when the model declines or a named movie is not in the graph), 400 (a layer rejected the draft; the body lists every check), 422 (invalid question), 502 (LLM failed or answered off-schema), 503 (no LLM configured, or database down), 504 (query timeout). Every rejected draft is logged with its failed checks, including drafts a retry later fixed.
+Status codes: 200 (answered, or `answered: false` when the model declines, a named movie is not in the graph, or a title matches several movies, whose candidates are then listed), 400 (a layer rejected the draft; the body lists every check), 422 (invalid question), 502 (LLM failed or answered off-schema), 503 (no LLM configured, or database down), 504 (query timeout). Every rejected draft is logged with its failed checks, including drafts a retry later fixed.
 
 ## Flow of `GET /api/users/{id}/recommendations/{movie_id}/why`
 

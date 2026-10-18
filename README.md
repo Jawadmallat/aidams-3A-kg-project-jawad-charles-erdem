@@ -108,7 +108,7 @@ curl -X POST http://localhost:8080/api/ask -H 'Content-Type: application/json' \
 curl 'http://localhost:8080/api/users/1/recommendations/2918/why'
 ```
 
-`/api/ask` returns the rows **with** the generated `cypher`, its `params`, the model's `explanation`, every validation step in `checks`, and `resolvedMovies` (which film the server matched for each title in the question). An answer is only as good as the query behind it, so the query is always shown. `/why` returns `paths` (verified, read from Neo4j) separately from `summary` (AI-written), with `summaryCheck` listing any number or genre the summary states that the paths do not contain. Such a summary is kept but flagged `UNVERIFIED` in `note`.
+`/api/ask` returns the rows **with** the generated `cypher`, its `params`, the model's `explanation`, every validation step in `checks`, and `resolvedMovies` (which film the server matched for each title in the question; when a title such as *Titanic* matches several films, nothing runs and the candidates are listed so the question can be asked again with the year). An answer is only as good as the query behind it, so the query is always shown. `/why` returns `paths` (verified, read from Neo4j) separately from `summary` (AI-written), with `summaryCheck` listing any number or genre the summary states that the paths do not contain. Such a summary is kept but flagged `UNVERIFIED` in `note`.
 
 ## Guardrails and reliability
 
