@@ -10,7 +10,7 @@ import pytest
 from neo4j.exceptions import ClientError
 
 from app import llm
-from app.models import CypherDraft
+from app.models import CypherDraft, MovieRef
 from app.services import ask, guardrails
 from app.services.guardrails import Validation
 
@@ -146,3 +146,19 @@ def test_ask_end_to_end_on_the_fixture(api_client, monkeypatch):
     assert {"movieId": 2571, "title": "The Matrix"} in body["rows"]
     assert body["cypher"].endswith(f"LIMIT {guardrails.MAX_LIMIT}")
     assert all(check["passed"] for check in body["checks"])
+
+
+def test_ask_resolves_named_movies_on_the_server(api_client, monkeypatch):
+    """Through HTTP: the model names The Matrix, the server binds its movieId."""
+    monkeypatch.setenv("LLM_API_KEY", "k")
+    monkeypatch.setenv("LLM_MODEL", "m")
+    draft = CypherDraft(
+        cypher="MATCH (m:Movie {movieId: $m1})-[:IN_GENRE]->(g:Genre) RETURN g.name AS genre",
+        movies=[MovieRef(param="m1", title="the matrix", year=1999)],
+        explanation="Genres of The Matrix.",
+    )
+    monkeypatch.setattr(llm, "complete_json", lambda *_: draft)
+    body = api_client.post("/api/ask", json={"question": "Genres of The Matrix?"}).json()
+    assert body["params"] == {"m1": 2571}
+    assert body["resolvedMovies"][0]["matchedTitle"] == "The Matrix"
+    assert {row["genre"] for row in body["rows"]} == {"Action", "Sci-Fi", "Thriller"}

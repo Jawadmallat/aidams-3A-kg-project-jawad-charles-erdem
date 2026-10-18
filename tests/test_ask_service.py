@@ -10,7 +10,7 @@ import pytest
 from neo4j.exceptions import ClientError
 
 from app import llm
-from app.models import CypherDraft
+from app.models import CypherDraft, MovieRef
 from app.services import ask
 from app.services.guardrails import Check
 
@@ -62,11 +62,18 @@ def fixture_stub(monkeypatch):
     monkeypatch.setenv("LLM_API_KEY", "test-key")
     monkeypatch.setenv("LLM_MODEL", "test-model")
 
-    def script(*drafts, explains=None, rows=None):
+    def script(*drafts, explains=None, rows=None, movie_ids=None):
         model = ScriptedLLM(*drafts)
         explain_results = list(explains or [COMPILES])
         monkeypatch.setattr(llm, "complete_json", model)
         monkeypatch.setattr(ask, "explain", lambda *_: explain_results.pop(0))
+        ids = dict(movie_ids or {})
+        monkeypatch.setattr(ask, "resolve_movies", lambda _driver, refs: [
+            {"param": ref.param, "title": ref.title, "year": ref.year,
+             "movieId": ids.get(ref.title), "matchedTitle": ref.title if ref.title in ids
+             else None, "matchedYear": None, "score": None, "ambiguous": False}
+            for ref in refs
+        ])
         if isinstance(rows, Exception):
             def failing_execute(*_):
                 raise rows
@@ -206,3 +213,48 @@ def test_jsonable_turns_driver_values_into_json():
     assert ask._jsonable(value) == {  # pylint: disable=protected-access
         "a": [1, 2.5, None], "b": [True, {"c": "2018-09-24T00:00:00Z"}]
     }
+
+
+NAMED = CypherDraft(
+    cypher="MATCH (m:Movie {movieId: $m1})<-[r:RATED]-() RETURN count(r) AS n",
+    params={"m1": "the model's guess"},
+    movies=[MovieRef(param="m1", title="Heat")],
+    explanation="Ratings of Heat.",
+)
+
+
+def test_named_movies_are_bound_by_the_server(stub):
+    """The resolved movieId replaces whatever the model put in that parameter."""
+    stub(NAMED, movie_ids={"Heat": 6}, rows=[{"n": 110}])
+    result = ask.answer(driver=None, question="How many ratings does Heat have?")
+    assert result["params"] == {"m1": 6}
+    assert result["resolvedMovies"][0]["movieId"] == 6
+    assert result["rows"] == [{"n": 110}]
+
+
+def test_an_unknown_movie_is_not_answered_and_nothing_runs(stub):
+    """A named movie absent from the graph: answered false, with the reason."""
+    stub(NAMED, movie_ids={}, rows=ValueError("must not run"))
+    result = ask.answer(driver=None, question="How many ratings does Heat have?")
+    assert result["answered"] is False
+    assert result["cypher"] is None
+    assert result["explanation"] == "No movie in the graph matches 'Heat'."
+    assert result["resolvedMovies"][0]["movieId"] is None
+
+
+def test_the_missing_movie_explanation_names_the_year():
+    """Unresolved movies are listed with their year when given."""
+    resolved = [{"title": "Heat", "year": 1995, "movieId": None},
+                {"title": "Alien", "year": None, "movieId": 1214}]
+    assert ask._unresolved_explanation(resolved) == (  # pylint: disable=protected-access
+        "No movie in the graph matches 'Heat' (1995)."
+    )
+
+
+def test_a_rejection_reports_the_resolved_movies(stub):
+    """The 400 body shows which movies the server matched."""
+    bad = NAMED.model_copy(update={"cypher": "MATCH (m:Movie {movieId: $m1}) DETACH DELETE m"})
+    stub(bad, movie_ids={"Heat": 6})
+    with pytest.raises(ask.QueryRejected) as caught:
+        ask.answer(driver=None, question="delete Heat")
+    assert ask.rejection_body(caught.value)["resolvedMovies"][0]["movieId"] == 6
