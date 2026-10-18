@@ -268,11 +268,30 @@ def test_an_unknown_movie_is_not_answered_and_nothing_runs(stub):
 
 def test_the_missing_movie_explanation_names_the_year():
     """Unresolved movies are listed with their year when given."""
-    resolved = [{"title": "Heat", "year": 1995, "movieId": None},
-                {"title": "Alien", "year": None, "movieId": 1214}]
+    resolved = [{"title": "Heat", "year": 1995, "movieId": None, "ambiguous": False},
+                {"title": "Alien", "year": None, "movieId": 1214, "ambiguous": False}]
     assert ask._unresolved_explanation(resolved) == (  # pylint: disable=protected-access
         "No movie in the graph matches 'Heat' (1995)."
     )
+
+
+def test_an_ambiguous_title_asks_for_the_year_and_runs_nothing(stub, monkeypatch):
+    """A title shared by several films: answered false, the candidates listed."""
+    stub(NAMED, rows=ValueError("must not run"))
+    monkeypatch.setattr(ask, "resolve_movies", lambda _driver, refs: [{
+        "param": "m1", "title": "Titanic", "year": None, "movieId": None,
+        "matchedTitle": None, "matchedYear": None, "score": None, "ambiguous": True,
+        "candidates": [{"movieId": 1721, "title": "Titanic", "year": 1997},
+                       {"movieId": 2157, "title": "Titanic", "year": 1953}],
+    }])
+    result = ask.answer(driver=None, question="How many ratings does Titanic have?")
+    assert result["answered"] is False
+    assert result["cypher"] is None
+    assert result["explanation"] == (
+        "'Titanic' matches several movies: Titanic (1997, movie id 1721); "
+        "Titanic (1953, movie id 2157). Ask again with the year or the movie id."
+    )
+    assert len(result["resolvedMovies"][0]["candidates"]) == 2
 
 
 def test_a_rejection_reports_the_resolved_movies(stub):
