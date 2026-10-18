@@ -137,8 +137,20 @@ class GuardrailCheck(BaseModel):
     detail: str
 
 
+class MovieCandidate(BaseModel):
+    """One of the movies an ambiguous title could mean."""
+
+    movieId: int
+    title: str
+    year: int | None
+
+
 class ResolvedMovie(BaseModel):
-    """How the server matched a movie the question names (null movieId: none)."""
+    """How the server matched a movie the question names.
+
+    A null movieId means no match (`candidates` empty) or an ambiguous title
+    (`ambiguous` true, the tied movies in `candidates`).
+    """
 
     param: str
     title: str
@@ -148,6 +160,7 @@ class ResolvedMovie(BaseModel):
     matchedYear: int | None
     score: float | None
     ambiguous: bool
+    candidates: list[MovieCandidate] = Field(default_factory=list)
 
 
 class AskResponse(BaseModel):
@@ -157,8 +170,9 @@ class AskResponse(BaseModel):
     else the model wrote (`cypher`, `explanation`) is AI-generated: the query
     passed every check in `checks`, but it may still not be what the question
     meant, which is why it is returned for the reader to inspect. `answered`
-    is false when the model declined or a named movie is not in the graph
-    (no query ran, `cypher` is null). `resolvedMovies` shows which movie
+    is false when the model declined, a named movie is not in the graph, or
+    a title matches several movies (no query ran, `cypher` is null; the
+    candidates are in `resolvedMovies`). `resolvedMovies` shows which movie
     each title in the question was matched to, by the server, not the LLM.
     """
 

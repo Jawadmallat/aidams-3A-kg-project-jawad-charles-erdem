@@ -9,10 +9,13 @@ this module picks the match, deterministically and visibly:
    filtered on the year;
 2. only candidates whose title contains every word of the requested title
    are kept, so "Toy Story 2" can never silently become "Toy Story";
-3. an exact title match wins, then the full-text score, then the lowest id.
+3. an exact title match wins, then the full-text score.
 
-A tie on the last two criteria is flagged `ambiguous` (two films called
-"Emma" in 1996). No candidate left means the movie is not in the graph.
+A tie on both (remakes such as Titanic 1953 and 1997 when no year is given,
+or the two films called "Emma" in 1996) is `ambiguous`: no movie is chosen,
+the tied `candidates` are returned, and /api/ask asks the user to be more
+specific instead of answering about an arbitrary one. No candidate left
+means the movie is not in the graph.
 """
 
 import re
@@ -25,6 +28,9 @@ from app.models import MovieRef
 
 # How many full-text hits are considered before the word filter.
 CANDIDATES = 10
+
+# How many tied candidates an ambiguous title lists.
+MAX_LISTED = 5
 
 RESOLVE_QUERY = """
 CALL db.index.fulltext.queryNodes('movie_title_fulltext', $text) YIELD node, score
@@ -64,20 +70,26 @@ def pick(ref: MovieRef, candidates: list[dict]) -> dict:
     unresolved = {
         "param": ref.param, "title": ref.title, "year": ref.year, "movieId": None,
         "matchedTitle": None, "matchedYear": None, "score": None, "ambiguous": False,
+        "candidates": [],
     }
     if not kept:
         return unresolved
 
     def rank(candidate: dict) -> tuple:
         exact = fold(candidate["title"]) == fold(ref.title)
-        return (not exact, -candidate["score"], candidate["movieId"])
+        return (not exact, -candidate["score"])
 
-    kept.sort(key=rank)
+    kept.sort(key=lambda candidate: (rank(candidate), candidate["movieId"]))
     best = kept[0]
-    ambiguous = len(kept) > 1 and rank(kept[1])[:2] == rank(best)[:2]
+    tied = [candidate for candidate in kept if rank(candidate) == rank(best)]
+    if len(tied) > 1:
+        return {**unresolved, "ambiguous": True, "candidates": [
+            {"movieId": c["movieId"], "title": c["title"], "year": c["year"]}
+            for c in tied[:MAX_LISTED]
+        ]}
     return {
         **unresolved, "movieId": best["movieId"], "matchedTitle": best["title"],
-        "matchedYear": best["year"], "score": round(best["score"], 3), "ambiguous": ambiguous,
+        "matchedYear": best["year"], "score": round(best["score"], 3),
     }
 
 

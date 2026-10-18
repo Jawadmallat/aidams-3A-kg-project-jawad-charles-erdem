@@ -212,16 +212,29 @@ def _not_answered(question: str, explanation: str, attempt: int, model: str,
     }
 
 
+def _named(movie: dict) -> str:
+    """'Title' or 'Title' (year), as the question named the movie."""
+    return f"'{movie['title']}'" + (f" ({movie['year']})" if movie["year"] else "")
+
+
 def _unresolved_explanation(resolved: list[dict]) -> str | None:
-    """Why the question cannot be answered, if a named movie is not in the graph."""
-    missing = [movie for movie in resolved if movie["movieId"] is None]
-    if not missing:
-        return None
-    names = ", ".join(
-        f"'{movie['title']}'" + (f" ({movie['year']})" if movie["year"] else "")
-        for movie in missing
-    )
-    return f"No movie in the graph matches {names}."
+    """Why no query can run: a named movie is missing, or its title is ambiguous.
+
+    An ambiguous title lists its candidates so the user can ask again with a
+    year or a movie id, instead of getting an answer about an arbitrary film.
+    """
+    reasons = []
+    for movie in resolved:
+        if movie["ambiguous"]:
+            options = "; ".join(
+                f"{c['title']} ({c['year'] if c['year'] else 'year unknown'}, "
+                f"movie id {c['movieId']})" for c in movie["candidates"]
+            )
+            reasons.append(f"{_named(movie)} matches several movies: {options}. "
+                           "Ask again with the year or the movie id.")
+        elif movie["movieId"] is None:
+            reasons.append(f"No movie in the graph matches {_named(movie)}.")
+    return " ".join(reasons) or None
 
 
 def answer(driver: Driver, question: str) -> dict:
