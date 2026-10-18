@@ -1,0 +1,28 @@
+%% System architecture: services, ports and data flows.
+%% Source of docs/architecture.png; regenerate with the command in docs/architecture.md.
+flowchart LR
+    client["Client<br/>browser, curl, Swagger UI"]
+
+    subgraph host["Docker host"]
+        direction LR
+        subgraph net["Compose network (internal)"]
+            direction LR
+            nginx["<b>nginx</b><br/>nginx:1.27-alpine<br/>listens :80<br/>allowlist: /api/*, /docs, /openapi.json"]
+            api["<b>api</b><br/>FastAPI + uvicorn :8000<br/>(expose only)<br/>guardrails, title resolution,<br/>EXPLAIN, read transactions"]
+            neo4j[("<b>neo4j</b> 5.26<br/>bolt :7687, browser :7474<br/>APOC + GDS<br/>volume neo4j_data")]
+        end
+    end
+
+    llm["LLM provider<br/>OpenAI-compatible API<br/>default: Groq, gpt-oss-120b<br/>LLM_BASE_URL / LLM_MODEL / LLM_API_KEY"]
+
+    client -- "HTTP :8080 (only published port)" --> nginx
+    nginx -- "proxy_pass :8000" --> api
+    api -- "Bolt :7687<br/>parameterized Cypher,<br/>read-only for LLM queries" --> neo4j
+    api -- "HTTPS, JSON mode<br/>/ask: schema + question<br/>/why: graph paths only" --> llm
+
+    classDef published fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+    classDef internal fill:#f1f5f9,stroke:#475569,color:#0f172a
+    classDef external fill:#fef3c7,stroke:#b45309,color:#0f172a
+    class nginx published
+    class api,neo4j internal
+    class llm,client external

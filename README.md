@@ -76,6 +76,52 @@ Conventions: ids are integers; unknown user or movie answers 404 naming the id; 
 
 The Cypher behind the endpoints uses scoped `CALL {}` subqueries, `EXISTS {}` / `COUNT {}` subqueries, list-comprehension predicates and multi-stage `WITH` aggregations deliberately - `app/services/*.py` keeps each query as one documented constant, and `app/services/paths.py` exposes the graph-path evidence the "why was this recommended" endpoint builds on.
 
+## Architecture
+
+![System architecture](docs/architecture.png)
+
+The client only ever reaches Nginx on port 8080. The API (8000) and Neo4j (7687) live on the internal Compose network, and the API calls an OpenAI-compatible LLM provider over HTTPS. The request flows of the two LLM endpoints, step by step, are in [docs/architecture.md](docs/architecture.md).
+
+## LLM component: ask the graph, and why was this recommended
+
+Two endpoints use a language model, and in both the graph supplies the facts:
+
+| Endpoint | What it does | What the LLM is allowed to do |
+|---|---|---|
+| `POST /api/ask` | answers a question in English by running Cypher on the graph | write a **read-only query draft**, which is validated before anything runs; the rows come from Neo4j |
+| `GET /api/users/{id}/recommendations/{movie_id}/why` | explains a recommendation with the actual graph paths (like-minded users who liked the movie, genre paths) | reword those paths into a short summary, which is fact-checked against them; with no path it is not called at all |
+
+**Setup.** Any OpenAI-compatible provider works. The default is Groq's free API (no local model needed):
+
+```bash
+# in .env (never committed)
+LLM_BASE_URL=https://api.groq.com/openai/v1
+LLM_MODEL=openai/gpt-oss-120b
+LLM_API_KEY=<your key>
+```
+
+Without `LLM_API_KEY`, `/api/ask` answers a clear 503 and the rest of the API works. `/why` still returns its verified paths, with `summary: null`. The tests mock the LLM, so CI and `make test` never need a key.
+
+```bash
+curl -X POST http://localhost:8080/api/ask -H 'Content-Type: application/json' \
+     -d '{"question": "Which 5 movies are most similar to The Matrix?"}'
+curl 'http://localhost:8080/api/users/1/recommendations/2918/why'
+```
+
+`/api/ask` returns the rows **with** the generated `cypher`, its `params`, the model's `explanation`, every validation step in `checks`, and `resolvedMovies` (which film the server matched for each title in the question; when a title such as *Titanic* matches several films, nothing runs and the candidates are listed so the question can be asked again with the year). An answer is only as good as the query behind it, so the query is always shown. `/why` returns `paths` (verified, read from Neo4j) separately from `summary` (AI-written), with `summaryCheck` listing any number or genre the summary states that the paths do not contain. Such a summary is kept but flagged `UNVERIFIED` in `note`.
+
+## Guardrails and reliability
+
+LLM output is treated as untrusted. A generated query passes three independent layers before its rows are returned, and each layer reports a named check:
+
+1. **Static checks** (`app/services/guardrails.py`). Allowed: one statement starting with a read clause, `db.index.fulltext.query*` as the only procedures, and only the labels and relationship types of the schema. Rejected: write or admin keywords (`CREATE`, `MERGE`, `DELETE`, `SET`, `LOAD CSV`, `SHOW`, …, ignoring string literals and comments) and anything in `apoc`, `gds` or `dbms`. A missing or too large `LIMIT` is appended or lowered to 100.
+2. **`EXPLAIN` dry run** on Neo4j: the plan must compile, Neo4j must classify it as read-only, and it must not raise warnings about unknown labels, relationship types, **property keys** (a hallucinated `m.avgRating`) or missing parameters. A fixable error goes back to the model once.
+3. **Execution in a read transaction** with a 10 s timeout and at most 100 rows, so even a write that slipped past both layers is refused by the database itself.
+
+The prompt is generated from the schema in [`app/services/ask_schema.py`](app/services/ask_schema.py), which an integration test compares with the live graph. Movie titles the question names are resolved by the server, not by the model's Cypher: the evaluation showed the model could not be trusted to do it. Every rejected draft is logged.
+
+**Evaluation.** 42 questions: 18 in a tuning set and 9 held out, each checked against a hand-written reference query; 6 unanswerable or trap questions; 9 adversarial ones. With the current system: 16/18 and **9/9 held out** correct, 6/6 traps not answered, and the graph unchanged by every adversarial question. The write-up is honest about the prompt tuning, run-to-run variance, the one error no guardrail can catch (a valid query that answers a different question), and a real guardrail rejection of a model's output: [docs/evaluation.md](docs/evaluation.md).
+
 ## Performance
 
 Measured on the ml-25m 5% sample (1,265,960 ratings): precomputed similar answers in ~3 ms p50 where the live fallback needs ~116 ms - the argument for precomputing `SIMILAR`; trending dropped from 180 ms to 30 ms p50 once `PROFILE` showed its anchor query scanning every rating (now 2 db hits through the `rated_timestamp` index). Full tables, the PROFILE plans before and after, and how to reproduce: [docs/performance.md](docs/performance.md).
