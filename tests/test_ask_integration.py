@@ -162,3 +162,12 @@ def test_ask_resolves_named_movies_on_the_server(api_client, monkeypatch):
     assert body["params"] == {"m1": 2571}
     assert body["resolvedMovies"][0]["matchedTitle"] == "The Matrix"
     assert {row["genre"] for row in body["rows"]} == {"Action", "Sci-Fi", "Thriller"}
+
+
+def test_a_repeated_unknown_property_is_reported_once(recommender_graph):
+    """Neo4j warns per occurrence; the check states each problem once."""
+    checks = {check.name: check for check in ask.explain(
+        recommender_graph,
+        "MATCH (m:Movie) WHERE m.avgRating > 4 RETURN m.avgRating ORDER BY m.avgRating", {},
+    )}
+    assert checks["database_warnings"].detail.count("avgRating` does not exist") == 1

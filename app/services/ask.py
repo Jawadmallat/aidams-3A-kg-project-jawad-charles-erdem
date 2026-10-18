@@ -136,6 +136,8 @@ def explain(driver: Driver, cypher: str, params: dict) -> list[Check]:
             blocking.append(status.status_description)
         else:
             other.append(status.status_description)
+    # One warning per occurrence: `m.x` used twice is reported twice.
+    blocking, other = list(dict.fromkeys(blocking)), list(dict.fromkeys(other))
     if blocking:
         checks.append(Check("database_warnings", False, " | ".join(blocking)))
     else:
