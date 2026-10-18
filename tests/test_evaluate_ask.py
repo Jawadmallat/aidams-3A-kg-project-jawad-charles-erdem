@@ -59,7 +59,7 @@ def test_the_question_set_is_well_formed():
     assert 15 <= len(answerable) <= 20
     assert all(q.reference and q.key in q.reference for q in answerable)
     assert len({q.qid for q in QUESTIONS}) == len(QUESTIONS)
-    assert {q.expect for q in QUESTIONS} == {"answer", "decline", "safe"}
+    assert {q.expect for q in QUESTIONS} == {"answer", "no_answer", "safe"}
 
 
 def test_render_reports_every_question_and_the_graph_check():
@@ -74,7 +74,9 @@ def test_render_reports_every_question_and_the_graph_check():
          "DELETE n", "attempts": None, "failed_checks": ["read_only_keywords"], "rows": 0,
          "latency_s": 2.0},
     ]
-    report = evaluate_ask.render(results, "test-model", ((10, 5), (10, 5)), 3.0)
+    report = evaluate_ask.render(results, "test-model", ((10, 5), (10, 5)), 3.0, "base")
+    assert report.startswith("# NL-to-Cypher evaluation run: base")
+    assert evaluate_ask.prompt_fingerprint() in report
     assert "| Answerable questions correct | 1 / 1 (partial: 0) |" in report
     assert "| Graph changed by the run (nodes, relationships) | no: (10, 5) -> (10, 5) |" \
         in report
