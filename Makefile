@@ -6,6 +6,9 @@
 COMPOSE := docker compose
 DOCKER_USER ?= your-dockerhub-user
 IMAGE := $(DOCKER_USER)/movie-recommender-api
+# Pass .env to uv only when it exists: a fresh clone must still run make test
+# (integration tests skip themselves when NEO4J_TEST_URI is unset).
+ENV_FILE := $(if $(wildcard .env),--env-file .env)
 
 .PHONY: help install run seed gds test lint benchmark \
         docker-build docker-run docker-stop docker-push clean
@@ -17,23 +20,23 @@ install: ## Create .venv and install the locked dependencies
 	uv sync
 
 run: ## Run the API locally with reload (needs a running Neo4j and .env)
-	uv run --env-file .env uvicorn app.main:app --reload
+	uv run $(ENV_FILE) uvicorn app.main:app --reload
 
 seed: ## Load ml-latest-small into the Neo4j of .env (downloads it if needed)
 	uv run python scripts/download_data.py
-	uv run --env-file .env python -m scripts.seed_data
+	uv run $(ENV_FILE) python -m scripts.seed_data
 
 gds: ## Compute SIMILAR, communities and PageRank (run after every seed)
-	uv run --env-file .env python -m scripts.run_gds
+	uv run $(ENV_FILE) python -m scripts.run_gds
 
 test: ## Run the test suite with coverage (integration tests need NEO4J_TEST_URI)
-	uv run --env-file .env pytest --cov=app --cov=scripts --cov-report=term-missing
+	uv run $(ENV_FILE) pytest --cov=app --cov=scripts --cov-report=term-missing
 
 lint: ## Pylint over app, scripts and tests; fails under 9.5
 	uv run pylint app scripts tests --fail-under 9.5
 
 benchmark: ## Latency per endpoint against the database of .env
-	uv run --env-file .env python -m scripts.benchmark --repeats 50 --warmup 5
+	uv run $(ENV_FILE) python -m scripts.benchmark --repeats 50 --warmup 5
 
 docker-build: ## Build the API image
 	docker build -t $(IMAGE) .
