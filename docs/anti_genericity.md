@@ -71,3 +71,88 @@ The AI reached several of our decisions independently, which we read as confirma
 ### Summary
 
 The AI schema is a solid generic design and agrees with ours on the core. It differs where a decision depends on the data rather than on the description: what PageRank measures on this graph, the year and duplicate titles hidden in MovieLens titles, how sparse tags are, and how many likes a movie needs before its similarity means anything. Each of our differences is backed by a measurement on the dataset, and one AI idea was adopted.
+
+## LLM component (Part C)
+
+### How the AI design was obtained
+
+* **Assistant:** ChatGPT, on a personal account, default model (none was picked and "Think" was not turned on), 18 October 2026. Unlike the Part A run, this was a **normal chat, not a temporary one**, so the account's memory was on. The project had never been discussed with ChatGPT before, so the memory held nothing about it. The answer's `[MODEL]` line reads "GPT-6"; that is the model's own claim, not verified.
+* **Input:** the project's LLM requirements (NL-to-Cypher with validation, a "why" endpoint grounded in graph paths, guardrails against an unreliable LLM) and our graph schema, so that its Cypher could be run on our data. Nothing about our implementation was given. Three questions from our evaluation were included (Q16, Q17, Q14), each chosen because it tests a known pitfall: title lookup, variable scoping, and what "recent" means in a dataset that ends in 2018.
+
+<details>
+<summary>Prompt</summary>
+
+```text
+I am building a "Movie Recommender in Production" project: a recommendation
+service over a MovieLens graph in Neo4j 5, with Python and FastAPI. The graph is:
+(:User {userId})-[:RATED {rating 0.5-5.0, timestamp}]->(:Movie {movieId, title,
+year, genres})-[:IN_GENRE]->(:Genre {name}); (:User)-[:TAGGED {tag, timestamp}]->(:Movie);
+(:Movie)-[:SIMILAR {score}]->(:Movie); Movie also has community and pagerank.
+Titles are not unique. A full-text index movie_title_fulltext exists on Movie.title.
+
+I need two LLM features:
+1. POST /api/ask: a user asks a question in English, an LLM generates Cypher,
+   the system validates it, runs it on Neo4j and returns a structured response.
+2. GET /api/users/{id}/recommendations/{movie_id}/why: explains why a movie was
+   recommended to a user. The explanation must rely on actual graph paths, not
+   on unsupported LLM text.
+The LLM can be unreliable; guardrails must prevent unsafe, invalid or
+inappropriate queries.
+
+Design both features. Do not ask me questions; make your own choices.
+Reply with ONE fenced code block and nothing outside it, using exactly this format:
+[MODEL] your model name
+[ASK PIPELINE] numbered steps from question to response
+[SYSTEM PROMPT] the full system prompt you would send to the LLM
+[OUTPUT SCHEMA] the structured output the LLM must return
+[GUARDRAILS] every check, and what happens when it fails
+[RESPONSE] the JSON fields /api/ask returns
+[WHY PIPELINE] numbered steps, including what the LLM receives and when it is not called
+[WHY RESPONSE] the JSON fields /why returns
+[EVALUATION] how you would measure that it works
+[CYPHER] the Cypher your system should generate for:
+  (a) What is the average rating of Toy Story (1995)?
+  (b) How many users liked both Toy Story and The Matrix?
+  (c) Which 4 movies received the most ratings in the last 90 days of the data?
+```
+
+</details>
+
+### Its Cypher, run on our graph
+
+We ran the three queries exactly as the AI wrote them on ml-latest-small, with the movie ids its own resolution query returns.
+
+| Question | AI result | Reference | Our system (4 evaluation runs) |
+|---|---|---|---|
+| (a) average rating of Toy Story (1995) | 3.92 over 215 ratings: **correct** | 3.92 | correct in the run after title resolution; wrong in all 3 runs before it |
+| (b) users who liked both Toy Story and The Matrix | 65: **correct** | 65 | correct in the baseline, wrong in the 3 later runs (147 in the last: a `WITH u` dropped `m2` from scope) |
+| (c) 4 most rated movies in the last 90 days of the data | **error**: `Neo.ClientError.Statement.TypeError: Cannot subtract Duration from Long` | Inception, Deadpool 2, The Matrix, The Lord of the Rings: The Return of the King | correct in all 4 runs |
+
+(c) fails because the AI assumed `RATED.timestamp` is a Neo4j datetime; ours are Unix epoch seconds (integers), as `docs/decisions.md` states and our prompt tells the model. The AI flagged this assumption itself and said not to run the query until the type was confirmed. (b) is the question our model got wrong in 3 of 4 runs: the AI's query has the correct shape, so the error comes from our model's generation, not from the question. (a) works on our graph because Part A cleaned the titles: on the raw MovieLens title, `Toy Story (1995)`, its exact-title match would find nothing (9,729 of 9,742 raw titles contain the year).
+
+### Where we agree
+
+The AI's design and ours reach the same core decisions: the LLM only proposes a query and never executes it; strict Pydantic validation of the structured output; parameterized Cypher; an allowlist of labels, relationship types, properties and procedures, with the full-text procedure as the one narrow exception; no writes, APOC, `LOAD CSV` or multiple statements; a bounded `LIMIT` (at most 100 for both); `EXPLAIN` before execution, "an additional check, not a guarantee"; execution in a read transaction with a timeout; "liked" meaning a rating of 4.0 or more; a "recent" window anchored on the newest timestamp in the data, not on today; titles never treated as unique; a retry that goes through the whole validation again. It also recommends what our evaluation forced us into: "prefer predefined, reviewed query templates and deterministic title-resolution logic over arbitrary LLM-generated Cypher". For "why": evidence generated by the server, the LLM given only that evidence, no LLM call when there is no evidence, and a test that checks it is not called; our suite has that test (`tests/test_why.py`).
+
+### Where we differ, and why
+
+| # | AI choice | Our choice | Why (evidence) |
+|---|---|---|---|
+| 1 | **Hide the generated Cypher** from the public response (debug interface only); generic error messages that do not say which check failed | return `cypher`, `params`, `explanation` and every check; a rejection lists the failed checks | The brief asks for a visible distinction between verified facts and AI output. Our evaluation's Q17 shows why it matters: a valid, read-only, schema-correct query answered a different question (147 instead of 65), and only the query shows it. Naming the failed check does not help an attacker get past it, because layers 2 and 3 are enforced by Neo4j itself. For a public multi-tenant service, the AI's position would be the safer default. |
+| 2 | **A Cypher AST parser**; "do not rely on regular expressions alone" | text checks (literals and comments removed) **plus** Neo4j's own parser and planner through `EXPLAIN` **plus** a read transaction | We do not rely on the text checks alone: `EXPLAIN` is Neo4j parsing and planning the query, and gives the plan type (`r` for read-only) and warnings for unknown labels, types, properties and parameters. Layer 2 alone stops a write (tested with layer 1 switched off). |
+| 3 | **A least-privilege database user** with no write rights | read transactions and the `EXPLAIN` plan type | Read-only roles need Neo4j's role-based access control, which is an Enterprise Edition feature; the stack runs Community 5.26. A read transaction refuses writes server-side (`Neo.ClientError.Statement.AccessMode`, tested). |
+| 4 | **Timestamps as datetimes** | Unix epoch integers, stated in the prompt | Its (c) fails on our data with a type error; ours answered (c) correctly in all 4 runs. |
+| 5 | **Three statuses**: `ok`, `clarification_required`, `rejected` (400) | `answered: true/false` (200); 400 only when a guardrail rejects a draft | A model declining a question it cannot answer is a valid answer, not a client error. A clarification is the same kind of answer: `answered: false` with the candidates (see "What we took"). |
+| 6 | **"Why" only for a persisted or reproducible recommendation** (404 otherwise), with an algorithm version | any user–movie pair; `alreadyRated` flags a movie the user rated | Our recommendations are computed live and not stored. The evidence paths come from the same peer and genre logic as `/recommendations` (`app/services/paths.py`), which is the consistency the AI asks for. |
+| 7 | **Structured claims**, each mapped to evidence ids, and a deterministic template when a claim is unsupported | free-text summary, every number and genre in it checked against the paths; an unsupported claim is kept and flagged `UNVERIFIED` | The AI's version is stronger: our check cannot catch a misattribution (during development, the model once credited the user's own genre counts to other users; a prompt change fixed it, but the check would not have caught it). We keep a flagged summary instead of a template, by team decision, so the reader sees what the model got wrong. |
+| 8 | **Authentication, per-user rate limits (429), request ids, retention policy** | none; Nginx is the only entry point | Out of scope for this project: there are no user accounts. A rate limit on `/api/ask` would protect the provider quota (200,000 tokens a day on the free tier) and is a known next step. |
+| 9 | **An evaluation plan**: gold set, exact match as a diagnostic only, unsafe-execution target of zero, separate latencies per stage | an evaluation that was run: 42 questions, 4 reports, graph-unchanged check | Same method (a gold set judged on results, not query text, and zero unsafe executions). Ours has numbers, including the caveats: tuning on the same questions and run-to-run variance (`docs/evaluation.md`). |
+
+### What we took from the AI design
+
+* **Clarification instead of an arbitrary pick.** Our resolver used to break ties on the lowest movie id and only flag `ambiguous`. The AI's rule ("never silently select an arbitrary movie when several candidates remain") made us measure how often that happens: besides the 5 title–year pairs shared by different films, **267 titles are shared by 562 movies** across years (remakes such as *Titanic*, *Hamlet*, *Dracula*), so a question without a year could be answered about the wrong film. Now a tie means no query runs: `/api/ask` answers `answered: false`, lists the candidates with their year and movie id in `resolvedMovies[].candidates`, and asks for the year or the id ("'Titanic' matches several movies: Titanic (1997, movie id 1721); Titanic (1953, movie id 3404)…"). An exact title still beats longer ones (*Heat* is not ambiguous with *Dead Heat*). None of the titles in our evaluation questions is ambiguous (checked with the resolver), so the published evaluation results are unaffected.
+* **Not taken yet: claims mapped to evidence ids for `/why`** (row 7). It would replace our number-and-genre check with a stronger one; it changes the `/why` response and is left as the next improvement.
+
+### Summary
+
+The AI design is a careful generic one and agrees with ours on almost every safety decision, including two we only reached after measuring failures: resolving titles on the server, and treating `EXPLAIN` as one layer among several. It differs where our data and constraints decide: integer timestamps (its query fails on them), Community Edition (no read-only role), cleaned titles, and a brief that asks to show AI output rather than hide it. One of its ideas was adopted (clarification for ambiguous titles, which turned out to concern 267 titles rather than 5); another (claims mapped to evidence) is the next step for `/why`.
