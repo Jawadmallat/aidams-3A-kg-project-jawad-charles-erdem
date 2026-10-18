@@ -144,6 +144,30 @@ def test_a_fixable_explain_failure_is_retried_once_with_feedback(stub):
     assert model.prompts[1][-2]["role"] == "assistant"
 
 
+def test_every_rejected_draft_is_logged_even_when_a_retry_fixes_it(stub, caplog):
+    """The audit trail keeps the rejected first draft the response does not show."""
+    broken = CypherDraft(cypher="MATCH (m:Movie) RETURN m.avgRating AS r", explanation="x")
+    unknown = [Check("database_warnings", False, "property `avgRating` does not exist")]
+    stub(broken, GOOD, explains=[COMPILES[:2] + unknown, COMPILES])
+    with caplog.at_level("WARNING", logger="app.services.ask"):
+        ask.answer(driver=None, question="movies by avgRating")
+    assert len(caplog.records) == 1
+    message = caplog.records[0].getMessage()
+    assert "sent back to the model" in message
+    assert "m.avgRating" in message
+    assert "avgRating` does not exist" in message
+
+
+def test_a_static_rejection_is_logged_as_final(stub, caplog):
+    """A draft stopped by layer 1 is logged with the failed rule."""
+    stub(CypherDraft(cypher="MATCH (n) DETACH DELETE n", explanation="x"))
+    with caplog.at_level("WARNING", logger="app.services.ask"), \
+            pytest.raises(ask.QueryRejected):
+        ask.answer(driver=None, question="delete everything")
+    assert "(final)" in caplog.records[0].getMessage()
+    assert "read_only_keywords" in caplog.records[0].getMessage()
+
+
 def test_a_second_explain_failure_is_rejected(stub):
     """After the one retry, a still-broken query is rejected."""
     missing = [Check("database_warnings", False, "unknown property key")]

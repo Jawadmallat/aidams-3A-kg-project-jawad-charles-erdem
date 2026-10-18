@@ -17,6 +17,7 @@ never retried. Every step is reported in `checks`.
 """
 
 import json
+import logging
 from dataclasses import asdict
 
 import neo4j
@@ -28,6 +29,11 @@ from app.models import CypherDraft
 from app.services.ask_schema import describe_schema
 from app.services.guardrails import MAX_LIMIT, Check, Validation, validate
 from app.services.titles import resolve_movies
+
+# Every rejected draft is logged (WARNING) with the checks it failed, including
+# drafts that a retry later fixed and that the response therefore does not
+# show: `docker compose logs api` is the audit trail of what the LLM wrote.
+logger = logging.getLogger(__name__)
 
 # Seconds a generated query may run before Neo4j aborts it.
 QUERY_TIMEOUT_S = 10.0
@@ -174,6 +180,13 @@ def _feedback(draft: CypherDraft, failures: list[Check]) -> list[dict[str, str]]
     ]
 
 
+def _log_rejection(question: str, draft: CypherDraft, checks: list[Check], outcome: str) -> None:
+    """Record a rejected draft and why, whatever happens next."""
+    failed = "; ".join(f"{c.name}: {c.detail}" for c in checks if not c.passed)
+    logger.warning("ask: draft rejected (%s) | question=%r | cypher=%r | failed=%s",
+                   outcome, question, draft.cypher, failed)
+
+
 def _execute_checked(driver: Driver, validation: Validation, rejection: QueryRejected):
     """Layer 3 with its errors mapped: timeout, or a refusal added to `rejection`."""
     try:
@@ -228,13 +241,16 @@ def answer(driver: Driver, question: str) -> dict:
             **draft.params, **{movie["param"]: movie["movieId"] for movie in resolved}
         })
         if not validation.passed:
+            _log_rejection(question, draft, validation.checks, "final")
             raise QueryRejected(draft, validation.checks, resolved)
         dry_run = explain(driver, validation.cypher, validation.params)
         failures = [check for check in dry_run if not check.passed]
         if not failures:
             break
         if attempt > MAX_RETRIES or any(c.name == "read_only_plan" for c in failures):
+            _log_rejection(question, draft, dry_run, "final")
             raise QueryRejected(draft, validation.checks + dry_run, resolved)
+        _log_rejection(question, draft, dry_run, "sent back to the model")
         messages += _feedback(draft, failures)
 
     checks = validation.checks + dry_run
