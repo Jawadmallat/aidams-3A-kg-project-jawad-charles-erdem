@@ -26,7 +26,8 @@ from neo4j.exceptions import ClientError
 from app import llm
 from app.models import CypherDraft
 from app.services.ask_schema import describe_schema
-from app.services.guardrails import MAX_LIMIT, Check, validate
+from app.services.guardrails import MAX_LIMIT, Check, Validation, validate
+from app.services.titles import resolve_movies
 
 # Seconds a generated query may run before Neo4j aborts it.
 QUERY_TIMEOUT_S = 10.0
@@ -54,7 +55,11 @@ Rules:
   SKIP, LIMIT, read-only CALL {{}} subqueries, and the procedure
   db.index.fulltext.queryNodes. Never write, never use apoc, gds or dbms.
 - Put every value taken from the question in `params` and reference it as
-  $name in the query (titles, tags, genres, ids, years, thresholds).
+  $name in the query (tags, genres, ids, years, thresholds, search text).
+- Never look up a movie the question names by its title in the query. List
+  it in "movies" as {{"param": "m1", "title": "Toy Story", "year": 1995}}
+  (year null when not given) and match it as (m:Movie {{movieId: $m1}}): the
+  server resolves the title and binds its movieId to $m1.
 - Return named columns (RETURN m.title AS title), not whole nodes, and end
   with ORDER BY and LIMIT (at most {MAX_LIMIT}). Return as many rows as the
   question asks for: "which movie" is LIMIT 1, "which 5 movies" is LIMIT 5.
@@ -65,18 +70,25 @@ Rules:
 Example: "Which movies are tagged 'atmospheric'?" ->
 {{"cypher": "MATCH (:User)-[t:TAGGED]->(m:Movie) WHERE t.tag = $tag \
 RETURN m.title AS title, count(*) AS taggings ORDER BY taggings DESC, title LIMIT 10",
- "params": {{"tag": "atmospheric"}},
+ "params": {{"tag": "atmospheric"}}, "movies": [],
  "explanation": "Movies users tagged 'atmospheric', most tagged first."}}
+
+Example: "How many users rated Heat?" ->
+{{"cypher": "MATCH (m:Movie {{movieId: $m1}})<-[r:RATED]-(:User) RETURN count(r) AS ratings",
+ "params": {{}}, "movies": [{{"param": "m1", "title": "Heat", "year": null}}],
+ "explanation": "Counts the ratings of the movie Heat."}}
 """
 
 
 class QueryRejected(Exception):
     """A draft failed a validation layer; it never ran (or was refused)."""
 
-    def __init__(self, draft: CypherDraft, checks: list[Check]) -> None:
+    def __init__(self, draft: CypherDraft, checks: list[Check],
+                 resolved: list[dict] | None = None) -> None:
         super().__init__("generated query rejected")
         self.draft = draft
         self.checks = checks
+        self.resolved = resolved or []
 
 
 class QueryTimeout(Exception):
@@ -162,6 +174,41 @@ def _feedback(draft: CypherDraft, failures: list[Check]) -> list[dict[str, str]]
     ]
 
 
+def _execute_checked(driver: Driver, validation: Validation, rejection: QueryRejected):
+    """Layer 3 with its errors mapped: timeout, or a refusal added to `rejection`."""
+    try:
+        return execute(driver, validation.cypher, validation.params)
+    except ClientError as error:
+        if "TransactionTimedOut" in (error.code or ""):
+            raise QueryTimeout(f"query exceeded {QUERY_TIMEOUT_S:g} s") from error
+        rejection.checks = rejection.checks + [
+            Check("read_transaction", False, f"{error.code}: {error.message}")
+        ]
+        raise rejection from error
+
+
+def _not_answered(question: str, explanation: str, attempt: int, model: str,
+                  resolved: list[dict]) -> dict:
+    """The response when no query runs (declined, or a named movie is missing)."""
+    return {
+        "question": question, "answered": False, "cypher": None, "params": {},
+        "explanation": explanation, "checks": [], "rows": [], "rowCount": 0,
+        "truncated": False, "attempts": attempt, "model": model, "resolvedMovies": resolved,
+    }
+
+
+def _unresolved_explanation(resolved: list[dict]) -> str | None:
+    """Why the question cannot be answered, if a named movie is not in the graph."""
+    missing = [movie for movie in resolved if movie["movieId"] is None]
+    if not missing:
+        return None
+    names = ", ".join(
+        f"'{movie['title']}'" + (f" ({movie['year']})" if movie["year"] else "")
+        for movie in missing
+    )
+    return f"No movie in the graph matches {names}."
+
+
 def answer(driver: Driver, question: str) -> dict:
     """Answer a question with LLM-written, validated, read-only Cypher.
 
@@ -173,31 +220,25 @@ def answer(driver: Driver, question: str) -> dict:
     for attempt in range(1, MAX_RETRIES + 2):
         draft = llm.complete_json(messages, CypherDraft)
         if not draft.cypher.strip():
-            return {
-                "question": question, "answered": False, "cypher": None, "params": {},
-                "explanation": draft.explanation, "checks": [], "rows": [], "rowCount": 0,
-                "truncated": False, "attempts": attempt, "model": settings.model,
-            }
-        validation = validate(draft.cypher, draft.params)
+            return _not_answered(question, draft.explanation, attempt, settings.model, [])
+        resolved = resolve_movies(driver, draft.movies)
+        if missing := _unresolved_explanation(resolved):
+            return _not_answered(question, missing, attempt, settings.model, resolved)
+        validation = validate(draft.cypher, {
+            **draft.params, **{movie["param"]: movie["movieId"] for movie in resolved}
+        })
         if not validation.passed:
-            raise QueryRejected(draft, validation.checks)
+            raise QueryRejected(draft, validation.checks, resolved)
         dry_run = explain(driver, validation.cypher, validation.params)
         failures = [check for check in dry_run if not check.passed]
         if not failures:
             break
-        unsafe = any(check.name == "read_only_plan" for check in failures)
-        if unsafe or attempt > MAX_RETRIES:
-            raise QueryRejected(draft, validation.checks + dry_run)
+        if attempt > MAX_RETRIES or any(c.name == "read_only_plan" for c in failures):
+            raise QueryRejected(draft, validation.checks + dry_run, resolved)
         messages += _feedback(draft, failures)
 
     checks = validation.checks + dry_run
-    try:
-        rows, truncated = execute(driver, validation.cypher, validation.params)
-    except ClientError as error:
-        if "TransactionTimedOut" in (error.code or ""):
-            raise QueryTimeout(f"query exceeded {QUERY_TIMEOUT_S:g} s") from error
-        failed = Check("read_transaction", False, f"{error.code}: {error.message}")
-        raise QueryRejected(draft, checks + [failed]) from error
+    rows, truncated = _execute_checked(driver, validation, QueryRejected(draft, checks, resolved))
     checks.append(Check("read_transaction", True,
                         f"ran in a read transaction, timeout {QUERY_TIMEOUT_S:g} s"))
     return {
@@ -205,7 +246,7 @@ def answer(driver: Driver, question: str) -> dict:
         "params": validation.params, "explanation": draft.explanation,
         "checks": [asdict(check) for check in checks], "rows": rows,
         "rowCount": len(rows), "truncated": truncated, "attempts": attempt,
-        "model": settings.model,
+        "model": settings.model, "resolvedMovies": resolved,
     }
 
 
@@ -217,4 +258,5 @@ def rejection_body(error: QueryRejected) -> dict:
         "params": json.loads(json.dumps(error.draft.params, default=str)),
         "explanation": error.draft.explanation,
         "checks": [asdict(check) for check in error.checks],
+        "resolvedMovies": error.resolved,
     }

@@ -98,15 +98,26 @@ class SimilarResponse(BaseModel):
     results: list[SimilarMovie]
 
 
+class MovieRef(BaseModel):
+    """A movie the question names, for the server to resolve to its movieId."""
+
+    param: str = Field(pattern=r"^[A-Za-z_]\w*$")
+    title: str
+    year: int | None = None
+
+
 class CypherDraft(BaseModel):
     """What the LLM must answer for /api/ask: a query, never the answer itself.
 
     An empty `cypher` means the model judged the question unanswerable from
-    the graph; `explanation` then says why.
+    the graph; `explanation` then says why. `movies` lists the movies the
+    question names: the server resolves each title and binds its movieId to
+    `$param`, so the query never has to search titles itself.
     """
 
     cypher: str
     params: dict[str, Any] = Field(default_factory=dict)
+    movies: list[MovieRef] = Field(default_factory=list)
     explanation: str
 
 
@@ -126,6 +137,19 @@ class GuardrailCheck(BaseModel):
     detail: str
 
 
+class ResolvedMovie(BaseModel):
+    """How the server matched a movie the question names (null movieId: none)."""
+
+    param: str
+    title: str
+    year: int | None
+    movieId: int | None
+    matchedTitle: str | None
+    matchedYear: int | None
+    score: float | None
+    ambiguous: bool
+
+
 class AskResponse(BaseModel):
     """Answer of POST /api/ask.
 
@@ -133,7 +157,9 @@ class AskResponse(BaseModel):
     else the model wrote (`cypher`, `explanation`) is AI-generated: the query
     passed every check in `checks`, but it may still not be what the question
     meant, which is why it is returned for the reader to inspect. `answered`
-    is false when the model declined (no query ran, `cypher` is null).
+    is false when the model declined or a named movie is not in the graph
+    (no query ran, `cypher` is null). `resolvedMovies` shows which movie
+    each title in the question was matched to, by the server, not the LLM.
     """
 
     question: str
@@ -147,6 +173,7 @@ class AskResponse(BaseModel):
     truncated: bool
     attempts: int
     model: str
+    resolvedMovies: list[ResolvedMovie] = Field(default_factory=list)
 
 
 class WhyPeer(BaseModel):
