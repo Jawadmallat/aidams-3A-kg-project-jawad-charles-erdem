@@ -6,8 +6,14 @@ What the graph contains, how to load it, and the conventions every query should 
 |---|---|
 | Available | Users, movies, genres, ratings, tags; constraints and indexes; test fixture |
 | Available (`scripts/run_gds.py`) | `SIMILAR` relationships, `Movie.community`, `Movie.pagerank`, `User.community` |
+| Available (`app/`, Part B) | the four API endpoints, error conventions (404 unknown id, 200 + empty when nothing to return, 422 validation, 503 database down), path-evidence services for the "why" endpoint |
+| Available (Part B) | Docker Compose stack (Neo4j + API + Nginx), Makefile, CI, benchmark (`scripts/benchmark.py`, evidence in `docs/performance.md`) |
 
-## Local setup (until the Docker Compose stack exists)
+## Local setup (two standalone containers, an alternative to the Compose stack)
+
+The Compose stack in the README is the reference way to run everything. The
+two containers below remain useful for development: the tests wipe their
+database, so they need one that is not the stack's.
 
 Two Neo4j containers: one for development data, one disposable for the integration tests (they wipe it). Ports 7688 and 7689 avoid clashing with another local Neo4j on the defaults.
 

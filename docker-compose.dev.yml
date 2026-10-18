@@ -1,0 +1,10 @@
+# Development overlay: publishes Neo4j so local tools (browser, scripts, the
+# uvicorn dev server) can reach the containerized database.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+services:
+  neo4j:
+    ports:
+      - "7474:7474"   # browser
+      - "7687:7687"   # bolt

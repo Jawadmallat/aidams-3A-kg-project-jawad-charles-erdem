@@ -1,0 +1,17 @@
+[MAIN]
+# Lint everything the repository ships: make lint runs `pylint app scripts tests`.
+# The course requires a committed .pylintrc and a score of at least 9.5.
+
+[FORMAT]
+# Matches the style of the existing code (longest lines are Cypher and tables).
+max-line-length=100
+
+[MESSAGES CONTROL]
+# too-few-public-methods: Pydantic response models and test stubs are data-only
+#   by design; counting methods says nothing about them.
+# duplicate-code: the module-level Cypher constants legitimately share MATCH /
+#   RETURN fragments across services; deduplicating query text would hurt the
+#   one-query-one-constant readability the project relies on.
+disable=
+    too-few-public-methods,
+    duplicate-code
