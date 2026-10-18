@@ -5,9 +5,9 @@ rows map to models without renaming, and responses read like the graph contract
 in docs/decisions.md.
 """
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class MovieSummary(BaseModel):
@@ -96,3 +96,157 @@ class SimilarResponse(BaseModel):
     title: str
     source: Literal["gds", "co_rating"]
     results: list[SimilarMovie]
+
+
+class MovieRef(BaseModel):
+    """A movie the question names, for the server to resolve to its movieId."""
+
+    param: str = Field(pattern=r"^[A-Za-z_]\w*$")
+    title: str
+    year: int | None = None
+
+
+class CypherDraft(BaseModel):
+    """What the LLM must answer for /api/ask: a query, never the answer itself.
+
+    An empty `cypher` means the model judged the question unanswerable from
+    the graph; `explanation` then says why. `movies` lists the movies the
+    question names: the server resolves each title and binds its movieId to
+    `$param`, so the query never has to search titles itself.
+    """
+
+    cypher: str
+    params: dict[str, Any] = Field(default_factory=dict)
+    movies: list[MovieRef] = Field(default_factory=list)
+    explanation: str
+
+
+class AskRequest(BaseModel):
+    """Body of POST /api/ask."""
+
+    question: str = Field(min_length=3, max_length=500, examples=[
+        "Which 5 movies have the most ratings of 4 stars or more?"
+    ])
+
+
+class GuardrailCheck(BaseModel):
+    """One validation step the generated query went through."""
+
+    name: str
+    passed: bool
+    detail: str
+
+
+class MovieCandidate(BaseModel):
+    """One of the movies an ambiguous title could mean."""
+
+    movieId: int
+    title: str
+    year: int | None
+
+
+class ResolvedMovie(BaseModel):
+    """How the server matched a movie the question names.
+
+    A null movieId means no match (`candidates` empty) or an ambiguous title
+    (`ambiguous` true, the tied movies in `candidates`).
+    """
+
+    param: str
+    title: str
+    year: int | None
+    movieId: int | None
+    matchedTitle: str | None
+    matchedYear: int | None
+    score: float | None
+    ambiguous: bool
+    candidates: list[MovieCandidate] = Field(default_factory=list)
+
+
+class AskResponse(BaseModel):
+    """Answer of POST /api/ask.
+
+    `rows` are facts read from Neo4j by the query in `cypher`. Everything
+    else the model wrote (`cypher`, `explanation`) is AI-generated: the query
+    passed every check in `checks`, but it may still not be what the question
+    meant, which is why it is returned for the reader to inspect. `answered`
+    is false when the model declined, a named movie is not in the graph, or
+    a title matches several movies (no query ran, `cypher` is null; the
+    candidates are in `resolvedMovies`). `resolvedMovies` shows which movie
+    each title in the question was matched to, by the server, not the LLM.
+    """
+
+    question: str
+    answered: bool
+    cypher: str | None
+    params: dict[str, Any]
+    explanation: str
+    checks: list[GuardrailCheck]
+    rows: list[dict[str, Any]]
+    rowCount: int
+    truncated: bool
+    attempts: int
+    model: str
+    resolvedMovies: list[ResolvedMovie] = Field(default_factory=list)
+
+
+class WhyPeer(BaseModel):
+    """A like-minded user: liked the movie and shares liked movies with the user."""
+
+    peerId: int
+    sharedCount: int
+    sharedTitles: list[str]
+
+
+class WhyGenre(BaseModel):
+    """A genre path: the user liked movies in a genre the movie belongs to."""
+
+    genre: str
+    likedMoviesInGenre: int
+
+
+class WhyPaths(BaseModel):
+    """The graph paths behind a recommendation, read from Neo4j (verified)."""
+
+    peers: list[WhyPeer]
+    sharedGenres: list[WhyGenre]
+
+
+class SummaryCheck(BaseModel):
+    """Fact check of the AI summary against the paths.
+
+    `unsupported` lists the numbers and genres the summary states that do
+    not appear in the paths; `verified` is true when there are none.
+    """
+
+    verified: bool
+    unsupported: list[str]
+
+
+class WhySummary(BaseModel):
+    """What the LLM must answer for the why endpoint: prose only."""
+
+    summary: str
+
+
+class WhyResponse(BaseModel):
+    """Answer of GET /api/users/{id}/recommendations/{movie_id}/why.
+
+    `paths` are verified facts from the graph and are the explanation;
+    `summary` is an AI rewording of them (null when there is no evidence,
+    no LLM, or the LLM failed; `note` then says why), checked by
+    `summaryCheck`. A summary that fails the check is kept, flagged
+    `verified: false`, and `note` starts with "UNVERIFIED" naming the
+    unsupported claims. `alreadyRated` is the user's rating if they rated it.
+    """
+
+    userId: int
+    movieId: int
+    title: str
+    alreadyRated: float | None
+    hasEvidence: bool
+    paths: WhyPaths
+    summary: str | None
+    summarySource: Literal["llm"] | None
+    summaryCheck: SummaryCheck | None
+    note: str | None
