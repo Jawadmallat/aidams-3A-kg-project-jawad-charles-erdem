@@ -9,6 +9,7 @@ and the endpoints answer 503 (or omit the AI-written part) instead of failing.
 Tests never reach a provider: they replace `complete_json` with a stub.
 """
 
+import json
 import os
 from dataclasses import dataclass
 
@@ -72,7 +73,7 @@ def complete_json[T: BaseModel](messages: list[dict[str, str]], schema: type[T])
     instructions = {
         "role": "system",
         "content": "Answer with one JSON object matching this JSON Schema, and nothing else:\n"
-        + str(schema.model_json_schema()),
+        + json.dumps(schema.model_json_schema()),
     }
     try:
         completion = client.chat.completions.create(

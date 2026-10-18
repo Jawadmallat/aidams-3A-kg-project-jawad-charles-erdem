@@ -5,6 +5,7 @@ and called and answers a scripted reply, so these tests need neither a key
 nor a network and run in CI.
 """
 
+import json
 from types import SimpleNamespace
 
 import httpx2
@@ -133,7 +134,9 @@ def test_complete_json_sends_json_mode_and_the_schema(fake_client):
     assert request["temperature"] == 0
     assert request["messages"][0] == {"role": "user", "content": "q"}
     assert request["messages"][-1]["role"] == "system"
-    assert "cypher" in request["messages"][-1]["content"]
+    instructions = request["messages"][-1]["content"]
+    sent_schema = json.loads(instructions[instructions.index("{"):])
+    assert sent_schema == Answer.model_json_schema()
 
 
 @pytest.mark.parametrize(
