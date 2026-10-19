@@ -66,6 +66,9 @@ def check_summary(summary: str, evidence: dict, user_id: int, movie: dict) -> di
     Numbers are compared as integers (written-out numbers such as "five"
     are not checked); genres are matched as whole words against all the
     genres of the graph, so "Comedy" is only allowed if a genre path has it.
+    Digits inside the movie title are allowed, genre words inside quoted
+    titles are not: a summary naming "Horror Express" when Horror is not a
+    shared genre is flagged. That errs on the safe side (over-flagging).
     """
     allowed_numbers = set(re.findall(r"\d+", json.dumps(evidence)))
     allowed_numbers |= set(re.findall(r"\d+", movie["title"]))
