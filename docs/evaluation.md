@@ -55,6 +55,7 @@ The last row is the current system.
 * **Runs vary.** The same prompt (`90c0187b`) scored 15 and then 13 on the tuning set, even at temperature 0. A difference of about 2 questions between two runs is within that noise. A09 ("every rating, no limit") was declined in one run and answered with `LIMIT 100` in others.
 * **Question wording was fixed during development.** Before the baseline, Q10 and Q14 were changed after checking the references for ambiguity and ties (no LLM involved), and Q13 was reworded ("apart from The Matrix itself") after a first run showed it was ambiguous. That first run was discarded: 4 of its questions failed on the provider's rate limit, not on the model.
 * **Latency is not comparable across runs.** The last run's median (4.8 s against about 1 s before) includes waiting on the free tier's rate limit: 3 recorded retries, plus the client library's own retries, which are not counted. It measures Groq's throttling more than the pipeline.
+* **A UNION can return more rows than its LIMIT.** A final `LIMIT` only binds the last arm of a `UNION`, so the guardrail's appended limit does not cap the whole result. Rather than forbid `UNION`, `execute` (`app/services/ask.py`) fetches at most 101 rows, returns 100 and sets `truncated` when there were more.
 * **The judge is lenient on columns and strict on row counts.** Q18 ("which movie…") was scored partial when the model returned a top 10 with the right movie first.
 
 ### The remaining errors
