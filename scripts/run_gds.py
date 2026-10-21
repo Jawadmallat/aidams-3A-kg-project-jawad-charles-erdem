@@ -7,6 +7,9 @@
    a movie ranks high when many movies list it among their nearest neighbours.
 4. Cypher derives User.community: the community most of a user's liked movies
    belong to.
+5. Cypher writes Movie.likesCount (how many users liked the movie), so the
+   API's similarity fallback reads a property instead of counting a popular
+   movie's raters on every request.
 
 Projections are built in movieId order and Louvain runs single-threaded, so the
 same graph always yields the same communities. Previous results are removed
@@ -42,7 +45,7 @@ CALL (s) { DELETE s } IN TRANSACTIONS OF 10000 ROWS
 
 CLEAR_PROPERTIES = """
 MATCH (n) WHERE n:Movie OR n:User
-CALL (n) { REMOVE n.community, n.pagerank } IN TRANSACTIONS OF 10000 ROWS
+CALL (n) { REMOVE n.community, n.pagerank, n.likesCount } IN TRANSACTIONS OF 10000 ROWS
 """
 
 PROJECT_LIKES = """
@@ -120,6 +123,16 @@ CALL (u) {
 } IN TRANSACTIONS OF 1000 ROWS
 """
 
+# How many users liked each movie, stored once so request-time queries (the
+# similarity fallback's Jaccard denominator) read a property instead of
+# counting a popular movie's raters per candidate (review finding on PR #2).
+LIKES_COUNT = """
+MATCH (m:Movie)
+CALL (m) {
+  SET m.likesCount = COUNT { (m)<-[r:RATED]-(:User) WHERE r.rating >= $liked }
+} IN TRANSACTIONS OF 10000 ROWS
+"""
+
 SUMMARY = """
 CALL () { MATCH ()-[s:SIMILAR]->() RETURN count(s) AS similar }
 CALL () { MATCH (m:Movie) WHERE m.community IS NOT NULL RETURN count(m) AS moviesInCommunities }
@@ -167,6 +180,7 @@ def run_gds(driver: Driver) -> dict:
         drop_projections(driver)
 
     run_auto_commit(driver, USER_COMMUNITY, liked=LIKED_THRESHOLD)
+    run_auto_commit(driver, LIKES_COUNT, liked=LIKED_THRESHOLD)
     stats["graph"] = single(driver, SUMMARY)
     return stats
 
