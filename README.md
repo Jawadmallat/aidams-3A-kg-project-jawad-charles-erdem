@@ -182,7 +182,7 @@ On the second attempt the model declined (`attempts: 2`). The response lists onl
 
 ![Neo4j Browser: SIMILAR around The Matrix](docs/screenshots/09-neo4j-graph.png)
 
-**CI.** GitHub Actions runs lint and the tests (with a Neo4j service container) on every push and pull request. The merge of PR #3 into `main` passed both jobs.
+**CI.** GitHub Actions: lint runs on every push; the full tests (with a Neo4j service container) run on pull requests and on `main`. The merge of PR #3 into `main` passed both jobs.
 
 ![CI runs](docs/screenshots/11-ci-runs.png)
 ![CI: merge of PR #3](docs/screenshots/12-ci-merge-run.png)

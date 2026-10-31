@@ -1,7 +1,7 @@
 # Performance evidence
 
 Latency of every endpoint on the benchmark dataset, and the PROFILE plans that
-drove the two query rewrites. Owned by Part B (API, Cypher and performance).
+drove the three query rewrites. Owned by Part B (API, Cypher and performance).
 
 ## Setup
 
