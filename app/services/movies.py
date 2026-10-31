@@ -31,14 +31,17 @@ LIMIT $limit
 # definition); the denominators read the likesCount property run_gds stores,
 # because counting a popular candidate's raters per request dominated the cost
 # (520,865 db hits for one movie on the ml-25m sample - review finding on
-# PR #2, evidence in docs/performance.md). Like every GDS-derived value, the
-# counts are as fresh as the last run_gds run.
+# PR #2, evidence in docs/performance.md). A missing likesCount (seeded, no
+# run_gds yet) falls back to the live count, so scores stay exact, just slower;
+# a stale one is not detected: rerun run_gds after a seed or new ratings.
 SIMILAR_FALLBACK_QUERY = """
 MATCH (m:Movie {movieId: $movieId})<-[r1:RATED]-(u:User)-[r2:RATED]->(other:Movie)
 WHERE r1.rating >= $liked AND r2.rating >= $liked
 WITH m, other, count(DISTINCT u) AS shared
 WITH other, shared, toFloat(shared) /
-     (coalesce(m.likesCount, 0) + coalesce(other.likesCount, 0) - shared) AS score
+     (coalesce(m.likesCount, COUNT { (m)<-[r:RATED]-(:User) WHERE r.rating >= $liked })
+      + coalesce(other.likesCount, COUNT { (other)<-[r:RATED]-(:User) WHERE r.rating >= $liked })
+      - shared) AS score
 ORDER BY score DESC, shared DESC, other.movieId
 LIMIT $limit
 RETURN other.movieId AS movieId, other.title AS title, other.year AS year,
