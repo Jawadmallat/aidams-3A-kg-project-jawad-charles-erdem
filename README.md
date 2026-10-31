@@ -128,7 +128,7 @@ Measured on the ml-25m 5% sample (1,265,960 ratings): every endpoint except the 
 
 ## Public image
 
-The API image is published to Docker Hub, [erdemsanver1/movie-recommender-api](https://hub.docker.com/r/erdemsanver1/movie-recommender-api), so the stack can run without building:
+The API image is published to Docker Hub, [erdemsanver1/movie-recommender-api](https://hub.docker.com/r/erdemsanver1/movie-recommender-api), so it can be pulled without building (the Compose stack builds its own copy from the `Dockerfile`):
 
 ```bash
 docker pull erdemsanver1/movie-recommender-api
