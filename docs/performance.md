@@ -147,6 +147,17 @@ GDS path. The counts are as fresh as the last `run_gds` run, exactly like the
 `SIMILAR` relationships the fallback stands in for; an integration test checks
 `likesCount` matches the live count after `run_gds`.
 
+A second finding from the same review (Charles): the `0` defaults above break
+when `likesCount` is absent, for example after a seed without `run_gds`. The
+denominator goes negative, or reaches zero and fails the request with `/ by zero`.
+Both `m` and `other` now fall back to the live count,
+`coalesce(X.likesCount, COUNT { (X)<-[r:RATED]-(:User) WHERE r.rating >= $liked })`.
+`coalesce` runs the `COUNT` only when the property is missing, so the fast path
+is unchanged: still **2,781 db hits** for the same movie, against **584,482**
+with the live branch forced for every movie (same scores). A stale count cannot
+be detected this way and can still skew a score, or fail the request if the
+denominator reaches zero. The rule: rerun `run_gds` after a seed or new ratings.
+
 ## Checklist over every endpoint plan
 
 Checked on the PROFILE output of all six scenarios:
