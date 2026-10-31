@@ -1,4 +1,4 @@
-"""User queries: personalised recommendations now, discover later in the stage."""
+"""User queries: personalised recommendations and community discovery."""
 
 from neo4j import Driver
 
@@ -8,9 +8,12 @@ from scripts.movielens import LIKED_THRESHOLD
 # matching 2 of the user's top 3 genres scores 1.5x its peer evidence.
 GENRE_BOOST = 0.25
 
-# How many of the most similar users vote. Bounds the traversal on large
-# datasets: the peer stage reads at most 25 users' ratings, however popular
-# the user's movies are.
+# How many of the most similar users vote. Ranking the peers still aggregates
+# over every co-liker of the user's liked movies (one grouped pass); what the
+# cap bounds is everything after it: only the 25 best peers' rating histories
+# are expanded into candidates. If heavy raters ever make the ranking pass
+# itself too slow, the next lever is capping how many of the user's liked
+# movies are expanded (for example the most recent N).
 PEER_LIMIT = 25
 
 USER_QUERY = """

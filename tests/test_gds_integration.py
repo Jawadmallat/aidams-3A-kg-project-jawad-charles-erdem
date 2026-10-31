@@ -64,6 +64,18 @@ def test_user_community_is_their_most_liked_community(gds_graph):
         assert row["assigned"] == min(c for c, n in counts.items() if n == best)
 
 
+def test_likes_count_matches_live_likes(gds_graph):
+    """Every movie carries likesCount, equal to its live count of liked ratings."""
+    driver, _ = gds_graph
+    mismatched = rows(driver, f"""
+        MATCH (m:Movie)
+        WHERE m.likesCount IS NULL
+           OR m.likesCount <> COUNT {{ (m)<-[r:RATED]-(:User) WHERE r.rating >= {LIKED_THRESHOLD} }}
+        RETURN count(m) AS mismatched
+    """)
+    assert mismatched[0]["mismatched"] == 0
+
+
 def test_rerun_gives_identical_results(gds_graph):
     """Running GDS again replaces, rather than adds to, SIMILAR and the properties."""
     driver, _ = gds_graph

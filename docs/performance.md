@@ -27,21 +27,23 @@ uv run --env-file .env python -m scripts.benchmark --repeats 50 --warmup 5 --mar
 
 | scenario | requests | p50 ms | p95 ms | mean ms |
 |---|---|---|---|---|
-| similar (gds) | 50 | 2.9 | 4.1 | 3.2 |
-| similar (fallback) | 50 | 116.3 | 247.8 | 130.5 |
-| recommendations | 50 | 119.1 | 654.6 | 187.8 |
-| discover | 50 | 6.9 | 18.9 | 9.0 |
-| trending page 1 | 50 | 30.2 | 40.8 | 31.6 |
-| trending page 10 | 50 | 29.1 | 40.7 | 30.7 |
+| similar (gds) | 50 | 5.8 | 10.9 | 6.4 |
+| similar (fallback) | 50 | 5.9 | 18.0 | 7.1 |
+| recommendations | 50 | 138.8 | 626.3 | 193.3 |
+| discover | 50 | 7.2 | 18.1 | 9.1 |
+| trending page 1 | 50 | 30.5 | 42.1 | 32.1 |
+| trending page 10 | 50 | 30.4 | 40.3 | 31.6 |
 
 Reading the table:
 
-* **similar (gds) at 3 ms vs similar (fallback) at 116 ms** is the argument for
-  precomputing `SIMILAR`: the GDS path reads at most 10 relationships through
-  the `movieId` constraint (PROFILE: `NodeUniqueIndexSeek`, 2 db hits, then an
-  expand over 10 rows), while the fallback recomputes Jaccard live. The
-  fallback only ever runs for movies with fewer than 10 likers, so its cost is
-  bounded by a small audience.
+* **Both similarity paths answer in single-digit milliseconds, and both lean on
+  precomputation.** The GDS path reads at most 10 `SIMILAR` relationships
+  through the `movieId` constraint (PROFILE: `NodeUniqueIndexSeek`, 2 db hits,
+  then an expand over 10 rows). The fallback traverses the movie's small
+  audience (under 10 likers by definition) and reads precomputed `likesCount`
+  properties for its Jaccard denominators — before that rewrite (below) it
+  measured **116 ms p50 / 248 ms p95**, which is what recomputing everything
+  live costs and the clearest argument for precomputing `SIMILAR` itself.
 * **recommendations** traverses 25 peers' full rating histories; its p95 is a
   user whose peers are very active. The `PEER_LIMIT` cap in
   `app/services/users.py` is what keeps this bounded as the dataset grows.
@@ -119,6 +121,42 @@ is trivial next to the anti-join.
 (`Expand(Into)`, ~122k db hits for a very active user) dominates discover's
 9 ms mean. Acceptable at this scale; the candidate set is bounded by the
 community, never by the catalogue.
+
+## Rewrite 3: the fallback's Jaccard denominators (520,865 -> 2,781 db hits)
+
+A review finding on PR #2 (Charles): the fallback's traversal is bounded by
+the fallback movie's small audience, but its original Jaccard denominator ran
+a `COUNT { (other)<-[:RATED]-() ... }` **per candidate**, and candidates are
+whatever the movie's likers also liked — frequently very popular movies.
+Measured for one ordinary fallback movie on the ml-25m sample: 242 candidates
+whose counts iterated **111,847** rater relationships, **520,865 db hits** per
+request — the whole explanation of the old 248 ms p95.
+
+`run_gds` now stores every movie's `likesCount` (recomputed on each run, like
+`community` and `pagerank`), and the fallback reads two properties instead of
+counting raters:
+
+```cypher
+WITH other, shared, toFloat(shared) /
+     (coalesce(m.likesCount, 0) + coalesce(other.likesCount, 0) - shared) AS score
+```
+
+Same movie, same results: **2,781 db hits** (187x fewer). The scenario went
+from 116 ms p50 / 248 ms p95 to **5.9 ms p50 / 18 ms p95** — on par with the
+GDS path. The counts are as fresh as the last `run_gds` run, exactly like the
+`SIMILAR` relationships the fallback stands in for; an integration test checks
+`likesCount` matches the live count after `run_gds`.
+
+A second finding from the same review (Charles): the `0` defaults above break
+when `likesCount` is absent, for example after a seed without `run_gds`. The
+denominator goes negative, or reaches zero and fails the request with `/ by zero`.
+Both `m` and `other` now fall back to the live count,
+`coalesce(X.likesCount, COUNT { (X)<-[r:RATED]-(:User) WHERE r.rating >= $liked })`.
+`coalesce` runs the `COUNT` only when the property is missing, so the fast path
+is unchanged: still **2,781 db hits** for the same movie, against **584,482**
+with the live branch forced for every movie (same scores). A stale count cannot
+be detected this way and can still skew a score, or fail the request if the
+denominator reaches zero. The rule: rerun `run_gds` after a seed or new ratings.
 
 ## Checklist over every endpoint plan
 

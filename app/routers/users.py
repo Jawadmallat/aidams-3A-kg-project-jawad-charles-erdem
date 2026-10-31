@@ -1,4 +1,4 @@
-"""User endpoints: /api/users/{id}/recommendations now, /discover later."""
+"""User endpoints: personalised recommendations and community discovery."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from neo4j import Driver

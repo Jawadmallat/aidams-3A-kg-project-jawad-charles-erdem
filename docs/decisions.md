@@ -139,6 +139,7 @@ Ask Part A for any other index an endpoint needs, with the query it serves, so i
 * **`IMAX` is a MovieLens genre** although it is a screening format. It is kept as MovieLens defines it.
 * **Tags are a property of `TAGGED`**, not nodes, so each relationship records who tagged which movie with what.
 * **GDS results only exist for movies with at least 10 likes** (1,182 of 9,742 in ml-latest-small, covering 74% of all likes). A movie without `SIMILAR` needs a fallback, for example co-rating Cypher (users who liked this movie also liked...). Treat a missing `pagerank` as 0.
+* **A missing `likesCount` falls back to the live count; a stale one needs `run_gds`.** The fallback's Jaccard denominators read the `likesCount` that `run_gds` stores. When the property is absent (seeded, no `run_gds` yet) the query counts likes live, which is exact but slower (`docs/performance.md`, Rewrite 3). A stale count is not detected, so rerun `run_gds` after a seed or new ratings.
 * **`SIMILAR` is directed** (`a` lists `b` among its top 10), and the reverse link may not exist. Query it as `(m)-[:SIMILAR]->(other)` ordered by `score`.
 * **About half of the users share one community** (the widely liked classics), so `discover` for them is close to popularity.
 
