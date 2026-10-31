@@ -64,6 +64,8 @@ def complete_json[T: BaseModel](messages: list[dict[str, str]], schema: type[T])
     settings = get_settings()
     if settings is None:
         raise LLMNotConfigured("set LLM_API_KEY and LLM_MODEL to enable the LLM")
+    # A new client per call (no connection reuse): settings are re-read each
+    # time, so tests and .env changes need no restart. Fine at demo scale.
     client = openai.OpenAI(
         api_key=settings.api_key,
         base_url=settings.base_url,

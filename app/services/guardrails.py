@@ -20,7 +20,9 @@ from app.services.ask_schema import (
     RELATIONSHIPS,
 )
 
-# Upper bound on the rows any generated query may return.
+# Upper bound on the rows any generated query may return. Deliberately larger
+# than the REST page size (MAX_LIMIT = 50 in app/routers): an LLM answer is
+# one response with no next page, so it gets more room.
 MAX_LIMIT = 100
 
 # Clauses and keywords that write, change the schema or administer the
